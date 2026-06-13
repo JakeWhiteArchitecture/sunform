@@ -1150,6 +1150,8 @@
                 </div>
                 <button class="btn btn-secondary" onclick="event.stopPropagation(); resetWorkflow();" style="margin-top:8px;">New Analysis</button>
                 <button class="btn btn-secondary" id="debug-tiles-btn" onclick="event.stopPropagation(); toggleDebugTiles();" style="margin-top:8px;">Debug: show missing tiles</button>
+                <button class="btn btn-secondary" id="debug-dark-btn" onclick="event.stopPropagation(); toggleDebugDarkTiles();" style="margin-top:8px;">Debug: classify dark tiles</button>
+                <button class="btn btn-secondary" id="debug-down-btn" onclick="event.stopPropagation(); toggleDebugDownwardFaces();" style="margin-top:8px;">Debug: show rejected faces</button>
                 <div class="bug-report">
                     Results look wrong? <a id="bug-report-link" href="#">Report an issue</a>
                 </div>
@@ -1495,17 +1497,22 @@
             // Restore mesh visibility before cleanup
             showCalculationMeshes();
             clearRayProbe();
-            // Clear debug missing-tile overlay if showing
-            if (debugDroppedGroup) {
-                scene.remove(debugDroppedGroup);
-                debugDroppedGroup.traverse(c => {
+            // Clear debug overlays if showing
+            for (const g of [debugDroppedGroup, debugDarkGroup, debugDownGroup]) {
+                if (!g) continue;
+                scene.remove(g);
+                g.traverse(c => {
                     if (c.geometry) c.geometry.dispose();
                     if (c.material) c.material.dispose();
                 });
-                debugDroppedGroup = null;
-                const dbtn = document.getElementById('debug-tiles-btn');
-                if (dbtn) dbtn.textContent = 'Debug: show missing tiles';
             }
+            debugDroppedGroup = null;
+            debugDarkGroup = null;
+            debugDownGroup = null;
+            const _setText = (id, t) => { const b = document.getElementById(id); if (b) b.textContent = t; };
+            _setText('debug-tiles-btn', 'Debug: show missing tiles');
+            _setText('debug-dark-btn', 'Debug: classify dark tiles');
+            _setText('debug-down-btn', 'Debug: show rejected faces');
             // Reset all state
             if (buildingGroup) {
                 scene.remove(buildingGroup);
@@ -2504,6 +2511,58 @@
                 return this._query(node.left, ox, oy, oz, dx, dy, dz, invDx, invDy, invDz)
                     || this._query(node.right, ox, oy, oz, dx, dy, dz, invDx, invDy, invDz);
             }
+
+            // Debug-only: distance to the NEAREST occluder along a ray (or
+            // Infinity if none). Used to tell spurious self-shadow (occluder a
+            // few cm away) from a genuine distant obstruction.
+            nearestHit(ox, oy, oz, dx, dy, dz) {
+                const invDx = 1 / dx, invDy = 1 / dy, invDz = 1 / dz;
+                return this._queryNearest(this.root, ox, oy, oz, dx, dy, dz,
+                                          invDx, invDy, invDz, Infinity);
+            }
+
+            _queryNearest(node, ox, oy, oz, dx, dy, dz, invDx, invDy, invDz, best) {
+                let tmin, tmax, tymin, tymax, tzmin, tzmax;
+                if (invDx >= 0) { tmin = (node.minX - ox) * invDx; tmax = (node.maxX - ox) * invDx; }
+                else { tmin = (node.maxX - ox) * invDx; tmax = (node.minX - ox) * invDx; }
+                if (invDy >= 0) { tymin = (node.minY - oy) * invDy; tymax = (node.maxY - oy) * invDy; }
+                else { tymin = (node.maxY - oy) * invDy; tymax = (node.minY - oy) * invDy; }
+                if (tmin > tymax || tymin > tmax) return best;
+                if (tymin > tmin) tmin = tymin;
+                if (tymax < tmax) tmax = tymax;
+                if (invDz >= 0) { tzmin = (node.minZ - oz) * invDz; tzmax = (node.maxZ - oz) * invDz; }
+                else { tzmin = (node.maxZ - oz) * invDz; tzmax = (node.minZ - oz) * invDz; }
+                if (tmin > tzmax || tzmin > tmax) return best;
+                if (tzmin > tmin) tmin = tzmin;
+                if (tzmax < tmax) tmax = tzmax;
+                if (tmax < 0 || tmin > best) return best;  // behind ray, or farther than best
+
+                if (node.tris) {
+                    const buf = node.tris;
+                    for (let i = 0; i < node.triCount; i++) {
+                        const o = i * 9;
+                        const e1x = buf[o+3] - buf[o], e1y = buf[o+4] - buf[o+1], e1z = buf[o+5] - buf[o+2];
+                        const e2x = buf[o+6] - buf[o], e2y = buf[o+7] - buf[o+1], e2z = buf[o+8] - buf[o+2];
+                        const px = dy * e2z - dz * e2y, py = dz * e2x - dx * e2z, pz = dx * e2y - dy * e2x;
+                        const det = e1x * px + e1y * py + e1z * pz;
+                        if (det > -1e-10 && det < 1e-10) continue;
+                        const invDet = 1 / det;
+                        const tx = ox - buf[o], ty = oy - buf[o+1], tz = oz - buf[o+2];
+                        const u = (tx * px + ty * py + tz * pz) * invDet;
+                        if (u < 0 || u > 1) continue;
+                        const qx = ty * e1z - tz * e1y, qy = tz * e1x - tx * e1z, qz = tx * e1y - ty * e1x;
+                        const v = (dx * qx + dy * qy + dz * qz) * invDet;
+                        if (v < 0 || u + v > 1) continue;
+                        const t = (e2x * qx + e2y * qy + e2z * qz) * invDet;
+                        if (t > 1e-4 && t < best) best = t;
+                    }
+                    return best;
+                }
+
+                best = this._queryNearest(node.left, ox, oy, oz, dx, dy, dz, invDx, invDy, invDz, best);
+                best = this._queryNearest(node.right, ox, oy, oz, dx, dy, dz, invDx, invDy, invDz, best);
+                return best;
+            }
         }
 
         // ─── SUN POSITION CALCULATOR (pure JS — Spencer 1971) ───
@@ -2725,6 +2784,9 @@
         let cachedGridSize = null;
         let cachedDroppedCells = [];   // debug: grid squares the roof covered but that produced no tile
         let debugDroppedGroup = null;  // debug overlay group (toggled from Results)
+        let debugDarkGroup = null;     // debug overlay: dark (~0h) cells classified by occluder distance
+        let cachedDownwardTris = [];   // debug: faces rejected by the upward filter (inverted-normal candidates)
+        let debugDownGroup = null;     // debug overlay group for rejected downward faces
 
         async function prepareGridCells() {
             const gridSize = parseFloat(document.getElementById('grid_resolution').value) || 1.0;
@@ -2788,6 +2850,7 @@
 
             const worldTris = [];
             const MIN_UPWARD_NY = 0.1;
+            cachedDownwardTris = [];  // debug: rejected downward-facing faces (inverted-normal candidates)
             for (let f = 0; f < allMergedTris.length; f++) {
                 const tri = allMergedTris[f];
                 const [a, b, c] = tri;
@@ -2798,8 +2861,20 @@
                 const fnz = e1x*e2y - e1y*e2x;
                 const fnLen = Math.sqrt(fnx*fnx + fny*fny + fnz*fnz);
                 if (fnLen === 0) continue;
+                const nyN = fny / fnLen;
                 // Keep only faces whose normal has a meaningful upward (+Y) component
-                if (fny / fnLen < MIN_UPWARD_NY) continue;
+                if (nyN < MIN_UPWARD_NY) {
+                    // A strongly DOWNWARD-facing, non-vertical face here is a
+                    // candidate inverted-winding roof triangle: an upward roof
+                    // surface whose normal points down. It is rejected as "not
+                    // upward", which leaves a hole the missing-tile overlay
+                    // cannot see (it never enters the cell map). True
+                    // soffits/ceilings also land here — the overlay shows which.
+                    if (nyN <= -MIN_UPWARD_NY) {
+                        cachedDownwardTris.push({ tri, ny: nyN });
+                    }
+                    continue;
+                }
 
                 worldTris.push(tri);
             }
@@ -3640,6 +3715,159 @@
             console.table(cachedDroppedCells);
             showStatus(`Debug: ${cachedDroppedCells.length} missing tiles \u2014 ${summary}. Magenta=internal/dead-zone, Cyan=degenerate.`);
             if (btn) btn.textContent = 'Debug: hide missing tiles';
+        }
+
+        // \u2500\u2500\u2500 DEBUG: DARK-TILE CLASSIFIER \u2500\u2500\u2500
+        // Dark (~0h) cells aren't holes \u2014 they computed near-zero sun hours.
+        // For each, measure the distance to the nearest occluder under the
+        // HIGHEST sun of the day. A close occluder means the cell is shadowing
+        // itself on adjacent/overlapping roof geometry (a bug); a distant one
+        // means a genuine obstruction.
+        //   Red    = near occluder  (spurious self-shadow \u2014 within 1.5 cells)
+        //   Orange = far occluder   (genuine obstruction)
+        //   White  = no occluder    (0h with clear highest sun \u2014 unexpected)
+        function toggleDebugDarkTiles() {
+            const btn = document.getElementById('debug-dark-btn');
+
+            if (debugDarkGroup) {
+                scene.remove(debugDarkGroup);
+                debugDarkGroup.traverse(c => {
+                    if (c.geometry) c.geometry.dispose();
+                    if (c.material) c.material.dispose();
+                });
+                debugDarkGroup = null;
+                if (btn) btn.textContent = 'Debug: classify dark tiles';
+                hideStatus();
+                return;
+            }
+
+            const results = seasonResults[visibleSeason];
+            if (!results || !results.cellData || !shadowBVH) {
+                showStatus('Debug: run an analysis first');
+                setTimeout(hideStatus, 4000);
+                return;
+            }
+
+            const cellData = results.cellData;
+            const hoursArr = results.cellSunHours;
+            const sunPositions = results.sunPositions;
+            const gridSize = cachedGridSize || 1.0;
+            const NEAR = gridSize * 1.5;   // occluder this close \u21d2 self-shadow
+            const DARK_HOURS = 1.0;        // "dark-indigo" bottom band of the scale
+
+            // Highest sun of the day \u2014 if even this is blocked, the cell can't
+            // be genuinely open.
+            let bestAlt = -Infinity, bestSun = null;
+            for (const sp of sunPositions) {
+                if (sp.altitude > bestAlt) { bestAlt = sp.altitude; bestSun = sp; }
+            }
+            const sd = sunDirection(bestSun.azimuth, bestSun.altitude);
+
+            const positions = [];
+            const colors = [];
+            const counts = { near: 0, far: 0, open: 0 };
+            const COLORS = { near: [1.0, 0.0, 0.0], far: [1.0, 0.55, 0.0], open: [1.0, 1.0, 1.0] };
+            const sample = [];
+
+            for (let i = 0; i < cellData.length; i++) {
+                if (hoursArr[i] >= DARK_HOURS) continue;
+                const cd = cellData[i];
+                const ox = cd.centroid.x + cd.normal.x * 0.01;
+                const oy = cd.centroid.y + cd.normal.y * 0.01;
+                const oz = cd.centroid.z + cd.normal.z * 0.01;
+                const dist = shadowBVH.nearestHit(ox, oy, oz, sd.x, sd.y, sd.z);
+
+                let key;
+                if (!isFinite(dist)) key = 'open';
+                else if (dist < NEAR) key = 'near';
+                else key = 'far';
+                counts[key]++;
+                if (sample.length < 40) {
+                    sample.push({ hours: hoursArr[i], nearestDist: isFinite(dist) ? +dist.toFixed(3) : 'none', class: key });
+                }
+
+                const col = COLORS[key];
+                // Paint the cell's own triangles, lifted above the heatmap
+                for (const tri of cd.tris) {
+                    for (const v of tri) {
+                        positions.push(v[0] + cd.normal.x * 0.03,
+                                       v[1] + cd.normal.y * 0.03,
+                                       v[2] + cd.normal.z * 0.03);
+                        colors.push(col[0], col[1], col[2]);
+                    }
+                }
+            }
+
+            const totalDark = counts.near + counts.far + counts.open;
+            if (totalDark === 0) {
+                showStatus('Debug: no dark (<1h) cells found');
+                setTimeout(hideStatus, 4000);
+                return;
+            }
+
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            const mat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.name = 'debug_dark_tiles';
+
+            debugDarkGroup = new THREE.Group();
+            debugDarkGroup.name = 'debug_dark_tiles_group';
+            debugDarkGroup.add(mesh);
+            scene.add(debugDarkGroup);
+
+            console.log(`[debug] dark cells (<${DARK_HOURS}h) under highest sun (alt ${bestAlt.toFixed(1)}\u00b0):`, counts);
+            console.table(sample);
+            showStatus(`Debug: ${totalDark} dark cells \u2014 ${counts.near} self-shadow (red, occluder <${NEAR.toFixed(1)}m), ${counts.far} real (orange), ${counts.open} open (white).`);
+            if (btn) btn.textContent = 'Debug: hide dark tiles';
+        }
+
+        // \u2500\u2500\u2500 DEBUG: REJECTED DOWNWARD FACES (inverted-normal candidates) \u2500\u2500\u2500
+        // Faces dropped by the upward-facing filter because their winding normal
+        // points down. An upward roof surface with inverted winding lands here
+        // and is discarded, leaving a hole the missing-tile overlay can't see
+        // (it never entered the cell map). If these green patches fill the
+        // heatmap holes, those roof triangles have inverted normals.
+        function toggleDebugDownwardFaces() {
+            const btn = document.getElementById('debug-down-btn');
+
+            if (debugDownGroup) {
+                scene.remove(debugDownGroup);
+                debugDownGroup.traverse(c => {
+                    if (c.geometry) c.geometry.dispose();
+                    if (c.material) c.material.dispose();
+                });
+                debugDownGroup = null;
+                if (btn) btn.textContent = 'Debug: show rejected faces';
+                hideStatus();
+                return;
+            }
+
+            if (!cachedDownwardTris || cachedDownwardTris.length === 0) {
+                showStatus('Debug: no rejected downward faces (run an analysis first)');
+                setTimeout(hideStatus, 4000);
+                return;
+            }
+
+            const positions = [];
+            for (const d of cachedDownwardTris) {
+                for (const v of d.tri) positions.push(v[0], v[1], v[2]);
+            }
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            const mat = new THREE.MeshBasicMaterial({ color: 0x00ff00, side: THREE.DoubleSide });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.name = 'debug_downward_faces';
+
+            debugDownGroup = new THREE.Group();
+            debugDownGroup.name = 'debug_downward_faces_group';
+            debugDownGroup.add(mesh);
+            scene.add(debugDownGroup);
+
+            console.log(`[debug] rejected downward-facing faces: ${cachedDownwardTris.length}`);
+            showStatus(`Debug: ${cachedDownwardTris.length} downward-facing faces rejected by upward filter (green). If these fill the holes, their normals are inverted.`);
+            if (btn) btn.textContent = 'Debug: hide rejected faces';
         }
 
         // ─── EXPORT GLB (coloured ground + grey buildings) ───
