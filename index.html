@@ -1149,6 +1149,7 @@
                     <button class="btn btn-secondary" id="pdf-btn" onclick="event.stopPropagation(); showDownloadConfirm('pdf');" style="flex:1;">Download PDF</button>
                 </div>
                 <button class="btn btn-secondary" onclick="event.stopPropagation(); resetWorkflow();" style="margin-top:8px;">New Analysis</button>
+                <button class="btn btn-secondary" id="debug-tiles-btn" onclick="event.stopPropagation(); toggleDebugTiles();" style="margin-top:8px;">Debug: show missing tiles</button>
                 <div class="bug-report">
                     Results look wrong? <a id="bug-report-link" href="#">Report an issue</a>
                 </div>
@@ -1494,6 +1495,17 @@
             // Restore mesh visibility before cleanup
             showCalculationMeshes();
             clearRayProbe();
+            // Clear debug missing-tile overlay if showing
+            if (debugDroppedGroup) {
+                scene.remove(debugDroppedGroup);
+                debugDroppedGroup.traverse(c => {
+                    if (c.geometry) c.geometry.dispose();
+                    if (c.material) c.material.dispose();
+                });
+                debugDroppedGroup = null;
+                const dbtn = document.getElementById('debug-tiles-btn');
+                if (dbtn) dbtn.textContent = 'Debug: show missing tiles';
+            }
             // Reset all state
             if (buildingGroup) {
                 scene.remove(buildingGroup);
@@ -2711,6 +2723,8 @@
         // ─── PREPARE GRID CELLS (merge + slice — done ONCE, cached) ───
         let cachedCellData = null;  // reused across seasons
         let cachedGridSize = null;
+        let cachedDroppedCells = [];   // debug: grid squares the roof covered but that produced no tile
+        let debugDroppedGroup = null;  // debug overlay group (toggled from Results)
 
         async function prepareGridCells() {
             const gridSize = parseFloat(document.getElementById('grid_resolution').value) || 1.0;
@@ -2891,8 +2905,22 @@
             const cellData = [];
             const HEIGHT_TOL = 0.5; // metres — triangles within this band form one layer
 
+            // Debug: record grid squares that had upward-facing roof triangles
+            // but produced no heatmap tile (visible holes). Tagged with the
+            // reason they dropped so they can be visualised from the Results step.
+            cachedDroppedCells = [];
+            const recordDropped = (cell, key, reason) => {
+                const a = cell.area || 1;
+                const [cs, rs] = key.split(',');
+                cachedDroppedCells.push({
+                    x: cell.sumCx / a, y: cell.sumCy / a, z: cell.sumCz / a,
+                    col: parseInt(cs, 10), row: parseInt(rs, 10), reason,
+                });
+            };
+
             for (const k of cellKeys) {
                 const c = cells.get(k);
+                const beforeLen = cellData.length;
 
                 // Sort triangles by centroid Y (height) descending
                 const trisWithY = c.tris.map(tri => {
@@ -2948,7 +2976,10 @@
                     return dA < COPLANAR_DIST_TOL && dB < COPLANAR_DIST_TOL && dC < COPLANAR_DIST_TOL;
                 });
 
-                if (filtered.length === 0) continue;
+                if (filtered.length === 0) {
+                    recordDropped(c, k, 'all-internal/dead-zone');
+                    continue;
+                }
 
                 // Cluster into distinct height layers: any gap > HEIGHT_TOL starts a new layer
                 const layers = [];
@@ -3071,9 +3102,15 @@
                         });
                     }
                 }
+
+                // Cell covered roof but every layer/cluster dropped → visible hole
+                if (cellData.length === beforeLen) {
+                    recordDropped(c, k, 'degenerate-or-filtered');
+                }
             }
 
             console.log(`[prepareGridCells] cellData: ${cellData.length} cells from ${worldTris.length} triangles`);
+            console.log(`[prepareGridCells] dropped (no tile): ${cachedDroppedCells.length} cells`);
 
             cachedCellData = cellData;
             cachedGridSize = gridSize;
@@ -3528,7 +3565,81 @@
                 html += `<div style="${bold}">${SEASON_LABELS[k]}: analysis complete</div>`;
             }
             html += `<div style="margin-top:4px;">Total area: ${summary.area_total} m\u00b2 &nbsp;|&nbsp; Grid cells: ${summary.cells_total}</div>`;
+            if (cachedDroppedCells && cachedDroppedCells.length > 0) {
+                html += `<div style="margin-top:4px; color:#ff7ad4;">Missing tiles: ${cachedDroppedCells.length} (use Debug overlay)</div>`;
+            }
             document.getElementById('results-detail').innerHTML = html;
+        }
+
+        // \u2500\u2500\u2500 DEBUG: MISSING-TILE OVERLAY \u2500\u2500\u2500
+        // Visualises grid squares the roof covered but that produced no tile.
+        // Magenta = all triangles filtered as internal/dead-zone structure;
+        // Cyan = cell's layers/clusters were degenerate (zero-area slivers).
+        function toggleDebugTiles() {
+            const btn = document.getElementById('debug-tiles-btn');
+
+            // Toggle off
+            if (debugDroppedGroup) {
+                scene.remove(debugDroppedGroup);
+                debugDroppedGroup.traverse(c => {
+                    if (c.geometry) c.geometry.dispose();
+                    if (c.material) c.material.dispose();
+                });
+                debugDroppedGroup = null;
+                if (btn) btn.textContent = 'Debug: show missing tiles';
+                hideStatus();
+                return;
+            }
+
+            if (!cachedDroppedCells || cachedDroppedCells.length === 0) {
+                showStatus('Debug: no missing tiles recorded \u2014 run an analysis first');
+                setTimeout(hideStatus, 4000);
+                return;
+            }
+
+            const gridSize = cachedGridSize || 1.0;
+            const half = gridSize * 0.45;
+            const REASON_COLORS = {
+                'all-internal/dead-zone': [1.0, 0.0, 1.0],   // magenta
+                'degenerate-or-filtered': [0.0, 1.0, 1.0],   // cyan
+            };
+
+            const positions = [];
+            const colors = [];
+            const reasonCounts = {};
+
+            for (const d of cachedDroppedCells) {
+                reasonCounts[d.reason] = (reasonCounts[d.reason] || 0) + 1;
+                const col = REASON_COLORS[d.reason] || [1.0, 1.0, 1.0];
+                // Flat horizontal patch centred on the missing cell, lifted clear
+                const y = d.y + 0.05;
+                const x0 = d.x - half, x1 = d.x + half;
+                const z0 = d.z - half, z1 = d.z + half;
+                positions.push(
+                    x0, y, z0,  x1, y, z0,  x1, y, z1,
+                    x0, y, z0,  x1, y, z1,  x0, y, z1
+                );
+                for (let v = 0; v < 6; v++) colors.push(col[0], col[1], col[2]);
+            }
+
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            const mat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.name = 'debug_missing_tiles';
+
+            debugDroppedGroup = new THREE.Group();
+            debugDroppedGroup.name = 'debug_missing_tiles_group';
+            debugDroppedGroup.add(mesh);
+            scene.add(debugDroppedGroup);
+
+            const summary = Object.entries(reasonCounts)
+                .map(([r, n]) => `${n} ${r}`).join(', ');
+            console.log('[debug] missing tiles by reason:', reasonCounts);
+            console.table(cachedDroppedCells);
+            showStatus(`Debug: ${cachedDroppedCells.length} missing tiles \u2014 ${summary}. Magenta=internal/dead-zone, Cyan=degenerate.`);
+            if (btn) btn.textContent = 'Debug: hide missing tiles';
         }
 
         // ─── EXPORT GLB (coloured ground + grey buildings) ───
