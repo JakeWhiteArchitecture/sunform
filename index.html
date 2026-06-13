@@ -1151,7 +1151,7 @@
                 <button class="btn btn-secondary" onclick="event.stopPropagation(); resetWorkflow();" style="margin-top:8px;">New Analysis</button>
                 <button class="btn btn-secondary" id="debug-tiles-btn" onclick="event.stopPropagation(); toggleDebugTiles();" style="margin-top:8px;">Debug: show missing tiles</button>
                 <button class="btn btn-secondary" id="debug-dark-btn" onclick="event.stopPropagation(); toggleDebugDarkTiles();" style="margin-top:8px;">Debug: classify dark tiles</button>
-                <button class="btn btn-secondary" id="debug-down-btn" onclick="event.stopPropagation(); toggleDebugDownwardFaces();" style="margin-top:8px;">Debug: show rejected faces</button>
+                <button class="btn btn-secondary" id="debug-down-btn" onclick="event.stopPropagation(); toggleDebugDownwardFaces();" style="margin-top:8px;">Debug: show inverted faces</button>
                 <div class="bug-report">
                     Results look wrong? <a id="bug-report-link" href="#">Report an issue</a>
                 </div>
@@ -1512,7 +1512,7 @@
             const _setText = (id, t) => { const b = document.getElementById(id); if (b) b.textContent = t; };
             _setText('debug-tiles-btn', 'Debug: show missing tiles');
             _setText('debug-dark-btn', 'Debug: classify dark tiles');
-            _setText('debug-down-btn', 'Debug: show rejected faces');
+            _setText('debug-down-btn', 'Debug: show inverted faces');
             // Reset all state
             if (buildingGroup) {
                 scene.remove(buildingGroup);
@@ -2862,18 +2862,19 @@
                 const fnLen = Math.sqrt(fnx*fnx + fny*fny + fnz*fnz);
                 if (fnLen === 0) continue;
                 const nyN = fny / fnLen;
-                // Keep only faces whose normal has a meaningful upward (+Y) component
-                if (nyN < MIN_UPWARD_NY) {
-                    // A strongly DOWNWARD-facing, non-vertical face here is a
-                    // candidate inverted-winding roof triangle: an upward roof
-                    // surface whose normal points down. It is rejected as "not
-                    // upward", which leaves a hole the missing-tile overlay
-                    // cannot see (it never enters the cell map). True
-                    // soffits/ceilings also land here — the overlay shows which.
-                    if (nyN <= -MIN_UPWARD_NY) {
-                        cachedDownwardTris.push({ tri, ny: nyN });
-                    }
-                    continue;
+                // Reject only near-VERTICAL faces (walls). Keep near-horizontal
+                // and sloped faces of EITHER winding: a downward-wound face here
+                // is almost always an upward roof surface whose triangle is wound
+                // backwards (common in IFC / web-ifc pitched-roof triangulation),
+                // and rejecting it by winding sign leaves a hole. Downstream the
+                // per-triangle sampling normal is re-oriented upward, and the
+                // per-cell topmost-layer logic keeps the highest surface — so a
+                // genuine soffit/ceiling under a roof falls out as a lower layer.
+                if (Math.abs(nyN) < MIN_UPWARD_NY) continue;  // wall — skip
+                if (nyN <= -MIN_UPWARD_NY) {
+                    // Debug: a recovered downward-wound (inverted) roof face that
+                    // the old winding-based filter would have dropped as a hole.
+                    cachedDownwardTris.push({ tri, ny: nyN });
                 }
 
                 worldTris.push(tri);
@@ -3823,12 +3824,11 @@
             if (btn) btn.textContent = 'Debug: hide dark tiles';
         }
 
-        // \u2500\u2500\u2500 DEBUG: REJECTED DOWNWARD FACES (inverted-normal candidates) \u2500\u2500\u2500
-        // Faces dropped by the upward-facing filter because their winding normal
-        // points down. An upward roof surface with inverted winding lands here
-        // and is discarded, leaving a hole the missing-tile overlay can't see
-        // (it never entered the cell map). If these green patches fill the
-        // heatmap holes, those roof triangles have inverted normals.
+        // \u2500\u2500\u2500 DEBUG: RECOVERED INVERTED FACES \u2500\u2500\u2500
+        // Downward-wound (inverted-normal) roof faces that the old winding-based
+        // upward filter dropped as holes, now recovered by the winding-
+        // independent filter. Rendered green where they sit on the roof \u2014 these
+        // are the patches that used to be missing.
         function toggleDebugDownwardFaces() {
             const btn = document.getElementById('debug-down-btn');
 
@@ -3839,13 +3839,13 @@
                     if (c.material) c.material.dispose();
                 });
                 debugDownGroup = null;
-                if (btn) btn.textContent = 'Debug: show rejected faces';
+                if (btn) btn.textContent = 'Debug: show inverted faces';
                 hideStatus();
                 return;
             }
 
             if (!cachedDownwardTris || cachedDownwardTris.length === 0) {
-                showStatus('Debug: no rejected downward faces (run an analysis first)');
+                showStatus('Debug: no inverted (downward-wound) faces found');
                 setTimeout(hideStatus, 4000);
                 return;
             }
@@ -3865,9 +3865,9 @@
             debugDownGroup.add(mesh);
             scene.add(debugDownGroup);
 
-            console.log(`[debug] rejected downward-facing faces: ${cachedDownwardTris.length}`);
-            showStatus(`Debug: ${cachedDownwardTris.length} downward-facing faces rejected by upward filter (green). If these fill the holes, their normals are inverted.`);
-            if (btn) btn.textContent = 'Debug: hide rejected faces';
+            console.log(`[debug] recovered inverted (downward-wound) faces: ${cachedDownwardTris.length}`);
+            showStatus(`Debug: ${cachedDownwardTris.length} inverted (downward-wound) roof faces recovered (green). These were the holes.`);
+            if (btn) btn.textContent = 'Debug: hide inverted faces';
         }
 
         // ─── EXPORT GLB (coloured ground + grey buildings) ───
