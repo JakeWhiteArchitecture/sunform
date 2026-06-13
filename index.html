@@ -3021,45 +3021,53 @@
                     // Emit a cell entry per normal cluster
                     for (let ci = 0; ci < normalClusters.length; ci++) {
                         const clusterIdxs = normalClusters[ci];
-                        let sumCx = 0, sumCy = 0, sumCz = 0, area = 0;
-                        let sumNx = 0, sumNy = 0, sumNz = 0;
+                        let area = 0;
                         const clusterTris = [];
+
+                        // Sample the sun-ray origin from the DOMINANT (largest-area)
+                        // fragment, not the area-weighted average of the whole
+                        // cluster. At a hip/ridge a cell holds fragments from two
+                        // pitches; averaging their centroids lands the origin in the
+                        // valley *below* the fold — buried inside the roof solid, so
+                        // every sun ray hits a pitch above it and the tile reads 0
+                        // hours (the black hip artifact). A single fragment's
+                        // centroid is always exactly on the surface, and its own
+                        // upward normal lifts the origin clear.
+                        let bestTa = -1;
+                        let sampleC = null, sampleN = null;
 
                         for (const idx of clusterIdxs) {
                             const { tri } = layer[idx];
                             const [a, b, cc] = tri;
                             clusterTris.push(tri);
-                            const cx = (a[0] + b[0] + cc[0]) / 3;
-                            const cy = (a[1] + b[1] + cc[1]) / 3;
-                            const cz = (a[2] + b[2] + cc[2]) / 3;
                             const tn = triNormals[idx];
                             const ta = tn.len * 0.5;
                             area += ta;
-                            sumCx += cx * ta;
-                            sumCy += cy * ta;
-                            sumCz += cz * ta;
-                            if (tn.len > 0 && tri.groupNormal) {
-                                sumNx += tri.groupNormal.x * ta;
-                                sumNy += tri.groupNormal.y * ta;
-                                sumNz += tri.groupNormal.z * ta;
-                            } else if (tn.len > 0) {
-                                sumNx += tn.nx * ta;
-                                sumNy += tn.ny * ta;
-                                sumNz += tn.nz * ta;
+                            if (ta > bestTa) {
+                                bestTa = ta;
+                                sampleC = {
+                                    x: (a[0] + b[0] + cc[0]) / 3,
+                                    y: (a[1] + b[1] + cc[1]) / 3,
+                                    z: (a[2] + b[2] + cc[2]) / 3,
+                                };
+                                // Offset direction = this fragment's own upward
+                                // normal (triNormals are already sign-flipped to
+                                // ny >= 0, i.e. outward for an upward-facing roof).
+                                sampleN = (tn.len > 0)
+                                    ? { x: tn.nx, y: tn.ny, z: tn.nz }
+                                    : { x: 0, y: 1, z: 0 };
                             }
                         }
-                        const a2 = area || 1;
-                        const nLen = Math.sqrt(sumNx*sumNx + sumNy*sumNy + sumNz*sumNz);
+
+                        if (!sampleC) continue; // all-degenerate cluster
                         const suffix = (li === 0 && ci === 0) ? '' :
                             ':L' + li + (ci > 0 ? 'N' + ci : '');
                         cellData.push({
                             key: k + suffix,
                             tris: clusterTris,
                             area: area,
-                            centroid: { x: sumCx / a2, y: sumCy / a2, z: sumCz / a2 },
-                            normal: (nLen > 0 && sumNy > 0)
-                                ? { x: sumNx / nLen, y: sumNy / nLen, z: sumNz / nLen }
-                                : { x: 0, y: 1, z: 0 },
+                            centroid: sampleC,
+                            normal: (sampleN.y > 0) ? sampleN : { x: 0, y: 1, z: 0 },
                         });
                     }
                 }

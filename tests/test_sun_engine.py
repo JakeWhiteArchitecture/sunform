@@ -66,6 +66,41 @@ def make_wall_triangles(x, z0, z1, y0, y1, thickness=0.1):
                               thickness/2, (y1-y0)/2, (z1-z0)/2)
 
 
+def make_ridge_roof(x0=0.0, x1=10.0, eave=3.0, ridge_y=2.0):
+    """Two roof pitches meeting at a ridge along X at (y=ridge_y, z=0).
+
+    Pitch A (north, z<0) and pitch B (south, z>0) each slope down from the
+    ridge to an eave at z=-/+eave, y=0. Returns (pitchA_tris, pitchB_tris).
+    """
+    def quad(p0, p1, p2, p3):
+        return [(p0, p1, p2), (p0, p2, p3)]
+    pitch_a = quad((x0, 0, -eave), (x1, 0, -eave), (x1, ridge_y, 0), (x0, ridge_y, 0))
+    pitch_b = quad((x0, ridge_y, 0), (x1, ridge_y, 0), (x1, 0, eave), (x0, 0, eave))
+    return pitch_a, pitch_b
+
+
+def _tri_centroid(tri):
+    return tuple(sum(v[i] for v in tri) / 3 for i in range(3))
+
+
+def _tri_up_normal(tri):
+    """Unit normal of a triangle, sign-flipped to point upward (ny >= 0).
+
+    Mirrors the orientation the JS cell pipeline applies before sampling.
+    """
+    a, b, c = tri
+    e1 = [b[i] - a[i] for i in range(3)]
+    e2 = [c[i] - a[i] for i in range(3)]
+    n = [e1[1]*e2[2] - e1[2]*e2[1],
+         e1[2]*e2[0] - e1[0]*e2[2],
+         e1[0]*e2[1] - e1[1]*e2[0]]
+    length = math.sqrt(sum(x*x for x in n))
+    n = [x/length for x in n]
+    if n[1] < 0:
+        n = [-x for x in n]
+    return tuple(n)
+
+
 # ── Geometry fixture validation (runs first — prerequisite for all) ──────
 
 class TestGeometryFixtures:
@@ -710,6 +745,63 @@ class TestAccumulation:
         result = compute_sun_hours_array_style(cells, wall, sun_pos, time_step=1.0)
         assert result[0] == expected_hours, \
             f"Expected {expected_hours}h (blocked={blocked}), got {result[0]}h"
+
+
+# ── Roof-hip sampling invariant (the "black hip tile" regression) ────────
+class TestHipSampling:
+    """Locks in the rule the cell pipeline relies on to avoid black hip tiles.
+
+    At a hip/ridge a grid cell holds fragments from two pitches. The sun-ray
+    origin must be sampled from a point that lies ON one pitch's surface — not
+    from the area-weighted average of both pitches, which lands in the valley
+    *below* the fold, buried inside the roof solid. A buried origin sees a
+    pitch above it for every sun position and reads 0 sun hours (black tile).
+
+    These tests use the ridge roof itself as the shadow caster, mirroring the
+    app's BVH which includes the analysed surface.
+    """
+
+    def _summer_dirs(self):
+        suns = get_sun_positions(51.5, -0.1, 2026, 6, 21, time_step=0.5)
+        return [sun_direction(s['azimuth'], s['altitude']) for s in suns]
+
+    def test_averaged_cross_fold_origin_is_buried(self):
+        """The OLD behaviour: averaging both pitches buries the origin."""
+        pitch_a, pitch_b = make_ridge_roof()
+        roof = pitch_a + pitch_b
+        dirs = self._summer_dirs()
+
+        # Average of the two pitch centroids — lands below the ridge apex.
+        ca = _tri_centroid(pitch_a[0])
+        cb = _tri_centroid(pitch_b[0])
+        avg = tuple((ca[i] + cb[i]) / 2 for i in range(3))
+        avg_n = (0.0, 1.0, 0.0)  # averaged normal of two opposed pitches ≈ up
+        origin = tuple(avg[i] + avg_n[i] * 0.01 for i in range(3))
+
+        lit = sum(1 for d in dirs
+                  if not ray_hits_any_triangle(origin, d, roof, min_t=1e-4))
+        assert lit == 0, (
+            f"averaged cross-fold origin should be buried (0 lit), got {lit}. "
+            "If this no longer buries, the regression fixture is stale.")
+
+    def test_dominant_fragment_origin_is_lit(self):
+        """The FIX: sampling on a real pitch surface gets full sun."""
+        pitch_a, pitch_b = make_ridge_roof()
+        roof = pitch_a + pitch_b
+        dirs = self._summer_dirs()
+
+        # Sample from the dominant fragment's on-surface centroid + its own
+        # upward normal — exactly what the cell pipeline now does.
+        dom = pitch_a[0]
+        origin_c = _tri_centroid(dom)
+        n = _tri_up_normal(dom)
+        origin = tuple(origin_c[i] + n[i] * 0.01 for i in range(3))
+
+        lit = sum(1 for d in dirs
+                  if not ray_hits_any_triangle(origin, d, roof, min_t=1e-4))
+        assert lit == len(dirs), (
+            f"on-surface ridge sample should be fully lit ({len(dirs)}), "
+            f"got {lit} — origin is buried/self-shadowed.")
 
 
 if __name__ == '__main__':
