@@ -3131,16 +3131,20 @@
                         let area = 0;
                         const clusterTris = [];
 
-                        // Sample the sun-ray origin from the DOMINANT (largest-area)
-                        // fragment, not the area-weighted average of the whole
-                        // cluster. At a hip/ridge a cell holds fragments from two
-                        // pitches; averaging their centroids lands the origin in the
-                        // valley *below* the fold — buried inside the roof solid, so
-                        // every sun ray hits a pitch above it and the tile reads 0
-                        // hours (the black hip artifact). A single fragment's
-                        // centroid is always exactly on the surface, and its own
-                        // upward normal lifts the origin clear.
-                        let bestTa = -1;
+                        // Sample the sun-ray origin from the TOPMOST (highest
+                        // centroid-Y) fragment in the cluster. Two failure modes
+                        // motivate this:
+                        //   1. Hip/ridge: averaging fragments from two pitches
+                        //      lands the origin in the valley *below* the fold,
+                        //      buried in the roof solid → reads 0h (black tile).
+                        //   2. Thin slab: a slab's underside (kept once the filter
+                        //      became winding-independent) can have the largest
+                        //      area, so largest-area sampling puts the origin
+                        //      *below* the slab's top face → self-shadow (dark).
+                        // A single fragment's centroid is always exactly on the
+                        // surface, and taking the highest one guarantees nothing
+                        // in the cluster sits above the origin.
+                        let bestY = -Infinity;
                         let sampleC = null, sampleN = null;
 
                         for (const idx of clusterIdxs) {
@@ -3148,13 +3152,13 @@
                             const [a, b, cc] = tri;
                             clusterTris.push(tri);
                             const tn = triNormals[idx];
-                            const ta = tn.len * 0.5;
-                            area += ta;
-                            if (ta > bestTa) {
-                                bestTa = ta;
+                            area += tn.len * 0.5;
+                            const cy = (a[1] + b[1] + cc[1]) / 3;
+                            if (cy > bestY) {
+                                bestY = cy;
                                 sampleC = {
                                     x: (a[0] + b[0] + cc[0]) / 3,
-                                    y: (a[1] + b[1] + cc[1]) / 3,
+                                    y: cy,
                                     z: (a[2] + b[2] + cc[2]) / 3,
                                 };
                                 // Offset direction = this fragment's own upward
