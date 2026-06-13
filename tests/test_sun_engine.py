@@ -804,5 +804,63 @@ class TestHipSampling:
             f"got {lit} — origin is buried/self-shadowed.")
 
 
+# ── Upward-facing filter / inverted-winding holes (pitched-roof regression) ──
+class TestUpwardFacingFilter:
+    """Why pitched-roof tiles go missing: the upward-facing filter keeps a
+    triangle only if its WINDING-based normal points up (ny >= MIN_UPWARD_NY).
+
+    Real IFC meshes (web-ifc / IfcOpenShell triangulation) frequently emit
+    roof triangles with inconsistent winding — some normals point into the
+    solid. Those upward roof surfaces are then discarded as "not upward",
+    leaving holes the missing-tile overlay can't see (they never reach the
+    cell map). A winding-independent test (|ny|) keeps them.
+
+    These tests mirror the JS filter in prepareGridCells.
+    """
+
+    MIN_UPWARD_NY = 0.1
+
+    @staticmethod
+    def _ny(tri):
+        a, b, c = tri
+        e1 = [b[i]-a[i] for i in range(3)]
+        e2 = [c[i]-a[i] for i in range(3)]
+        n = [e1[1]*e2[2]-e1[2]*e2[1],
+             e1[2]*e2[0]-e1[0]*e2[2],
+             e1[0]*e2[1]-e1[1]*e2[0]]
+        length = math.sqrt(sum(x*x for x in n)) or 1.0
+        return n[1] / length
+
+    def _hip_pitch(self, invert=False):
+        # One pitch of a hip roof: base edge to a raised apex (slope ~31°).
+        tri = ((0, 0, 0), (10, 0, 0), (5, 3, 5))
+        if self._ny(tri) < 0:
+            tri = (tri[0], tri[2], tri[1])  # normalise to outward (ny>0)
+        if invert:
+            tri = (tri[0], tri[2], tri[1])  # flip winding → ny<0
+        return tri
+
+    def test_inverted_pitch_dropped_by_current_filter(self):
+        """Inverted-winding roof pitch is wrongly rejected → hole."""
+        inv = self._hip_pitch(invert=True)
+        ny = self._ny(inv)
+        assert ny < 0, f"inverted pitch should have ny<0, got {ny}"
+        kept = ny >= self.MIN_UPWARD_NY
+        assert not kept, "current filter drops the inverted roof pitch (hole)"
+
+    def test_inverted_pitch_kept_by_winding_independent_filter(self):
+        """A winding-independent test keeps the same surface (no hole)."""
+        inv = self._hip_pitch(invert=True)
+        kept = abs(self._ny(inv)) >= self.MIN_UPWARD_NY
+        assert kept, "winding-independent filter keeps the inverted roof pitch"
+
+    def test_vertical_wall_still_rejected_either_way(self):
+        """A near-vertical wall (ny≈0) is rejected by both tests — the fix
+        must not start admitting walls."""
+        wall = ((0, 0, 0), (0, 5, 0), (0, 5, 5))  # in the X=0 plane, normal ±X
+        ny = self._ny(wall)
+        assert abs(ny) < self.MIN_UPWARD_NY, f"wall ny should be ~0, got {ny}"
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
