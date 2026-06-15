@@ -3382,13 +3382,18 @@
             return [c[1], c[2], c[3]];
         }
 
-        // ─── CREATE HEATMAP GROUP (20mm OFFSET) ───
+        // ─── CREATE HEATMAP GROUP (vertical lift above surface) ───
         function createHeatmapGroup(results) {
             const group = new THREE.Group();
             group.name = 'heatmap_' + (results.season || 'default');
             if (!results.cellData || results.cellData.length === 0) return group;
 
-            const off = 0.02; // 20mm offset above surface
+            // Lift tiles straight up (+Y) by a constant amount, NOT along each
+            // cell's own normal. Adjacent cells share edge coordinates; a
+            // per-normal offset shoves those shared edges in different
+            // directions at folds (hips/ridges), tearing thin seams. A constant
+            // direction moves shared edges identically, so tiles stay welded.
+            const off = 0.02; // 20mm vertical lift
 
             const tilePositions = [];
             const tileColors = [];
@@ -3397,15 +3402,10 @@
                 const cd = results.cellData[i];
                 const hours = results.cellSunHours[i];
                 const [r, g, b] = lerpColour(hours);
-                const n = cd.normal;
 
                 for (const tri of cd.tris) {
                     for (const v of tri) {
-                        tilePositions.push(
-                            v[0] + n.x * off,
-                            v[1] + n.y * off,
-                            v[2] + n.z * off
-                        );
+                        tilePositions.push(v[0], v[1] + off, v[2]);
                         tileColors.push(r, g, b);
                     }
                 }
