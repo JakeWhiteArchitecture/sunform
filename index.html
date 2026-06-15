@@ -2717,6 +2717,26 @@
             ];
         }
 
+        function triNormalComponents(a, b, c) {
+            return [
+                (b[1]-a[1])*(c[2]-a[2]) - (b[2]-a[2])*(c[1]-a[1]),
+                (b[2]-a[2])*(c[0]-a[0]) - (b[0]-a[0])*(c[2]-a[2]),
+                (b[0]-a[0])*(c[1]-a[1]) - (b[1]-a[1])*(c[0]-a[0]),
+            ];
+        }
+
+        // Reverse a triangle's vertex order if its winding disagrees with a
+        // reference normal. Used to keep split sub-triangles wound like their
+        // parent (the split otherwise reverses winding when the lone vertex is
+        // the middle one), without averaging or moving any vertex.
+        function orientToReference(sub, rx, ry, rz) {
+            const [a, b, c] = sub;
+            const [nx, ny, nz] = triNormalComponents(a, b, c);
+            if (nx*rx + ny*ry + nz*rz < 0) {
+                const t = sub[1]; sub[1] = sub[2]; sub[2] = t;
+            }
+        }
+
         // Split an array of triangles along an axis-aligned plane (axis: 0=X, 2=Z)
         function splitTrisAlongPlane(tris, axis, value) {
             const result = [];
@@ -2763,6 +2783,11 @@
                     t2Out.faceNormal = tri.faceNormal;
                     t3Out.faceNormal = tri.faceNormal;
                 }
+                // Keep sub-triangle winding consistent with the parent
+                const [pnx, pny, pnz] = triNormalComponents(a, b, c);
+                orientToReference(t1Out, pnx, pny, pnz);
+                orientToReference(t2Out, pnx, pny, pnz);
+                orientToReference(t3Out, pnx, pny, pnz);
                 result.push(t1Out);
                 result.push(t2Out);
                 result.push(t3Out);
@@ -2979,7 +3004,8 @@
 
             const worldTris = [];
             const MIN_UPWARD_NY = 0.1;
-            cachedDownwardTris = [];  // debug: rejected downward-facing faces (inverted-normal candidates)
+            cachedDownwardTris = [];  // debug: any near-horizontal faces still wound downward after reorientation (expect ~0)
+            let reorientedCount = 0;
             for (let f = 0; f < dedupedTris.length; f++) {
                 const tri = dedupedTris[f];
                 const [a, b, c] = tri;
@@ -2991,22 +3017,23 @@
                 const fnLen = Math.sqrt(fnx*fnx + fny*fny + fnz*fnz);
                 if (fnLen === 0) continue;
                 const nyN = fny / fnLen;
-                // Reject only near-VERTICAL faces (walls). Keep near-horizontal
-                // and sloped faces of EITHER winding: a downward-wound face here
-                // is almost always an upward roof surface whose triangle is wound
-                // backwards (common in IFC / web-ifc pitched-roof triangulation),
-                // and rejecting it by winding sign leaves a hole. Downstream the
-                // per-triangle sampling normal is re-oriented upward, and the
-                // per-cell topmost-layer logic keeps the highest surface — so a
-                // genuine soffit/ceiling under a roof falls out as a lower layer.
+                // Reject only near-VERTICAL faces (walls). The analysis surface
+                // (the Step-3 selection) is upward-facing, so "up" is the correct
+                // outward direction. Any near-horizontal face wound downward is an
+                // inverted-winding roof triangle — reverse its vertex order so the
+                // winding is consistently up. No grouping, no averaging: each face
+                // keeps its exact position, only its cycle order may flip. Results
+                // are unchanged (the sampler already up-oriented per triangle);
+                // this just makes the geometry/overlay honest.
                 if (Math.abs(nyN) < MIN_UPWARD_NY) continue;  // wall — skip
-                if (nyN <= -MIN_UPWARD_NY) {
-                    // Debug: a recovered downward-wound (inverted) roof face that
-                    // the old winding-based filter would have dropped as a hole.
-                    cachedDownwardTris.push({ tri, ny: nyN });
+                if (nyN < 0) {
+                    const t = tri[1]; tri[1] = tri[2]; tri[2] = t;  // reverse winding → up
+                    reorientedCount++;
                 }
-
                 worldTris.push(tri);
+            }
+            if (reorientedCount > 0) {
+                console.log(`[prepareGridCells] reoriented ${reorientedCount} inverted-winding faces to upward`);
             }
 
             showStatus(`Upward faces: ${worldTris.length} of ${allMergedTris.length} kept`);
