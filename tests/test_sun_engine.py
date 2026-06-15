@@ -954,6 +954,25 @@ class TestSelfShadowExclusion:
         excl = sum(1 for d in dirs if not ray_hits_real_occluder(origin, d, wall, up))
         assert excl < len(dirs), "a tilted occluder (low |n·n|) must still shadow"
 
+    def test_opposite_roof_pitch_self_shadow_is_preserved(self):
+        """The concern: don't kill genuine self-shading. A north pitch shaded by
+        the opposite (south) pitch must read identically with the exclusion on,
+        because the two pitches are far from parallel (|nA·nB| ≈ 0.39)."""
+        def quad(p0, p1, p2, p3):
+            return [(p0, p1, p2), (p0, p2, p3)]
+        pitch_a = quad((0, 0, -3), (10, 0, -3), (10, 5, 0), (0, 5, 0))  # steep north
+        pitch_b = quad((0, 5, 0), (10, 5, 0), (10, 0, 3), (0, 0, 3))    # steep south
+        roof = pitch_a + pitch_b
+        n_a = _tri_up_normal(pitch_a[0])
+        origin = (5, 0.6 + n_a[1] * 0.01, -2.6 + n_a[2] * 0.01)  # low on north pitch
+        dirs = [sun_direction(s['azimuth'], s['altitude'])
+                for s in get_sun_positions(51.5, -0.1, 2026, 3, 20, 0.25)]
+        plain = sum(1 for d in dirs if not ray_hits_any_triangle(origin, d, roof, min_t=1e-4))
+        excl = sum(1 for d in dirs if not ray_hits_real_occluder(origin, d, roof, n_a))
+        assert plain < len(dirs), "sanity: the opposite pitch should partially self-shade here"
+        assert excl == plain, (
+            f"opposite-pitch self-shadow must be preserved: plain={plain}, excl={excl}")
+
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
