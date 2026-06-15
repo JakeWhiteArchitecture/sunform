@@ -2512,30 +2512,33 @@
                     || this._query(node.right, ox, oy, oz, dx, dy, dz, invDx, invDy, invDz);
             }
 
-            // Debug-only: distance to the NEAREST occluder along a ray (or
-            // Infinity if none). Used to tell spurious self-shadow (occluder a
-            // few cm away) from a genuine distant obstruction.
+            // Debug-only: nearest occluder along a ray. Returns { t, nx, ny, nz }
+            // (t = Infinity if none) where the normal is the hit triangle's
+            // geometric normal. Used to tell spurious self-shadow (occluder a few
+            // cm away) and parallel-sheet self-shadow (occluder a duplicate of
+            // the cell's own surface) from a genuine distant obstruction.
             nearestHit(ox, oy, oz, dx, dy, dz) {
                 const invDx = 1 / dx, invDy = 1 / dy, invDz = 1 / dz;
-                return this._queryNearest(this.root, ox, oy, oz, dx, dy, dz,
-                                          invDx, invDy, invDz, Infinity);
+                const res = { t: Infinity, nx: 0, ny: 0, nz: 0 };
+                this._queryNearest(this.root, ox, oy, oz, dx, dy, dz, invDx, invDy, invDz, res);
+                return res;
             }
 
-            _queryNearest(node, ox, oy, oz, dx, dy, dz, invDx, invDy, invDz, best) {
+            _queryNearest(node, ox, oy, oz, dx, dy, dz, invDx, invDy, invDz, res) {
                 let tmin, tmax, tymin, tymax, tzmin, tzmax;
                 if (invDx >= 0) { tmin = (node.minX - ox) * invDx; tmax = (node.maxX - ox) * invDx; }
                 else { tmin = (node.maxX - ox) * invDx; tmax = (node.minX - ox) * invDx; }
                 if (invDy >= 0) { tymin = (node.minY - oy) * invDy; tymax = (node.maxY - oy) * invDy; }
                 else { tymin = (node.maxY - oy) * invDy; tymax = (node.minY - oy) * invDy; }
-                if (tmin > tymax || tymin > tmax) return best;
+                if (tmin > tymax || tymin > tmax) return;
                 if (tymin > tmin) tmin = tymin;
                 if (tymax < tmax) tmax = tymax;
                 if (invDz >= 0) { tzmin = (node.minZ - oz) * invDz; tzmax = (node.maxZ - oz) * invDz; }
                 else { tzmin = (node.maxZ - oz) * invDz; tzmax = (node.minZ - oz) * invDz; }
-                if (tmin > tzmax || tzmin > tmax) return best;
+                if (tmin > tzmax || tzmin > tmax) return;
                 if (tzmin > tmin) tmin = tzmin;
                 if (tzmax < tmax) tmax = tzmax;
-                if (tmax < 0 || tmin > best) return best;  // behind ray, or farther than best
+                if (tmax < 0 || tmin > res.t) return;  // behind ray, or farther than best
 
                 if (node.tris) {
                     const buf = node.tris;
@@ -2554,14 +2557,18 @@
                         const v = (dx * qx + dy * qy + dz * qz) * invDet;
                         if (v < 0 || u + v > 1) continue;
                         const t = (e2x * qx + e2y * qy + e2z * qz) * invDet;
-                        if (t > 1e-4 && t < best) best = t;
+                        if (t > 1e-4 && t < res.t) {
+                            res.t = t;
+                            res.nx = e1y*e2z - e1z*e2y;
+                            res.ny = e1z*e2x - e1x*e2z;
+                            res.nz = e1x*e2y - e1y*e2x;
+                        }
                     }
-                    return best;
+                    return;
                 }
 
-                best = this._queryNearest(node.left, ox, oy, oz, dx, dy, dz, invDx, invDy, invDz, best);
-                best = this._queryNearest(node.right, ox, oy, oz, dx, dy, dz, invDx, invDy, invDz, best);
-                return best;
+                this._queryNearest(node.left, ox, oy, oz, dx, dy, dz, invDx, invDy, invDz, res);
+                this._queryNearest(node.right, ox, oy, oz, dx, dy, dz, invDx, invDy, invDz, res);
             }
         }
 
@@ -3131,16 +3138,20 @@
                         let area = 0;
                         const clusterTris = [];
 
-                        // Sample the sun-ray origin from the DOMINANT (largest-area)
-                        // fragment, not the area-weighted average of the whole
-                        // cluster. At a hip/ridge a cell holds fragments from two
-                        // pitches; averaging their centroids lands the origin in the
-                        // valley *below* the fold — buried inside the roof solid, so
-                        // every sun ray hits a pitch above it and the tile reads 0
-                        // hours (the black hip artifact). A single fragment's
-                        // centroid is always exactly on the surface, and its own
-                        // upward normal lifts the origin clear.
-                        let bestTa = -1;
+                        // Sample the sun-ray origin from the TOPMOST (highest
+                        // centroid-Y) fragment in the cluster. Two failure modes
+                        // motivate this:
+                        //   1. Hip/ridge: averaging fragments from two pitches
+                        //      lands the origin in the valley *below* the fold,
+                        //      buried in the roof solid → reads 0h (black tile).
+                        //   2. Thin slab: a slab's underside (kept once the filter
+                        //      became winding-independent) can have the largest
+                        //      area, so largest-area sampling puts the origin
+                        //      *below* the slab's top face → self-shadow (dark).
+                        // A single fragment's centroid is always exactly on the
+                        // surface, and taking the highest one guarantees nothing
+                        // in the cluster sits above the origin.
+                        let bestY = -Infinity;
                         let sampleC = null, sampleN = null;
 
                         for (const idx of clusterIdxs) {
@@ -3148,13 +3159,13 @@
                             const [a, b, cc] = tri;
                             clusterTris.push(tri);
                             const tn = triNormals[idx];
-                            const ta = tn.len * 0.5;
-                            area += ta;
-                            if (ta > bestTa) {
-                                bestTa = ta;
+                            area += tn.len * 0.5;
+                            const cy = (a[1] + b[1] + cc[1]) / 3;
+                            if (cy > bestY) {
+                                bestY = cy;
                                 sampleC = {
                                     x: (a[0] + b[0] + cc[0]) / 3,
-                                    y: (a[1] + b[1] + cc[1]) / 3,
+                                    y: cy,
                                     z: (a[2] + b[2] + cc[2]) / 3,
                                 };
                                 // Offset direction = this fragment's own upward
@@ -3720,13 +3731,12 @@
 
         // \u2500\u2500\u2500 DEBUG: DARK-TILE CLASSIFIER \u2500\u2500\u2500
         // Dark (~0h) cells aren't holes \u2014 they computed near-zero sun hours.
-        // For each, measure the distance to the nearest occluder under the
-        // HIGHEST sun of the day. A close occluder means the cell is shadowing
-        // itself on adjacent/overlapping roof geometry (a bug); a distant one
-        // means a genuine obstruction.
-        //   Red    = near occluder  (spurious self-shadow \u2014 within 1.5 cells)
-        //   Orange = far occluder   (genuine obstruction)
-        //   White  = no occluder    (0h with clear highest sun \u2014 unexpected)
+        // For each, find the nearest occluder under the HIGHEST sun of the day
+        // and classify by distance AND the occluder's orientation:
+        //   Red    = near occluder              (self-shadow on adjacent geometry)
+        //   Purple = far but PARALLEL to cell    (duplicate/overlapping sheet \u2014 a bug)
+        //   Orange = far, differently oriented   (likely a genuine shadow)
+        //   White  = no occluder                 (0h with clear highest sun \u2014 odd)
         function toggleDebugDarkTiles() {
             const btn = document.getElementById('debug-dark-btn');
 
@@ -3766,8 +3776,13 @@
 
             const positions = [];
             const colors = [];
-            const counts = { near: 0, far: 0, open: 0 };
-            const COLORS = { near: [1.0, 0.0, 0.0], far: [1.0, 0.55, 0.0], open: [1.0, 1.0, 1.0] };
+            const counts = { near: 0, sheet: 0, far: 0, open: 0 };
+            const COLORS = {
+                near:  [1.0, 0.0, 0.0],   // red    — occluder within NEAR (self-shadow)
+                sheet: [0.6, 0.0, 1.0],   // purple — far but parallel (duplicate/overlap sheet)
+                far:   [1.0, 0.55, 0.0],  // orange — far, differently oriented (likely real)
+                open:  [1.0, 1.0, 1.0],   // white  — no occluder under highest sun
+            };
             const sample = [];
 
             for (let i = 0; i < cellData.length; i++) {
@@ -3776,12 +3791,22 @@
                 const ox = cd.centroid.x + cd.normal.x * 0.01;
                 const oy = cd.centroid.y + cd.normal.y * 0.01;
                 const oz = cd.centroid.z + cd.normal.z * 0.01;
-                const dist = shadowBVH.nearestHit(ox, oy, oz, sd.x, sd.y, sd.z);
+                const hit = shadowBVH.nearestHit(ox, oy, oz, sd.x, sd.y, sd.z);
+                const dist = hit.t;
 
                 let key;
-                if (!isFinite(dist)) key = 'open';
-                else if (dist < NEAR) key = 'near';
-                else key = 'far';
+                if (!isFinite(dist)) {
+                    key = 'open';
+                } else if (dist < NEAR) {
+                    key = 'near';
+                } else {
+                    // Far occluder: a sheet PARALLEL to this cell's own surface
+                    // implies a duplicate/overlapping layer shadowing the cell
+                    // (a bug); a differently-oriented one is a genuine shadow.
+                    const hl = Math.hypot(hit.nx, hit.ny, hit.nz) || 1;
+                    const pdot = Math.abs((hit.nx * cd.normal.x + hit.ny * cd.normal.y + hit.nz * cd.normal.z) / hl);
+                    key = (pdot > 0.9) ? 'sheet' : 'far';
+                }
                 counts[key]++;
                 if (sample.length < 40) {
                     sample.push({ hours: hoursArr[i], nearestDist: isFinite(dist) ? +dist.toFixed(3) : 'none', class: key });
@@ -3799,7 +3824,7 @@
                 }
             }
 
-            const totalDark = counts.near + counts.far + counts.open;
+            const totalDark = counts.near + counts.sheet + counts.far + counts.open;
             if (totalDark === 0) {
                 showStatus('Debug: no dark (<1h) cells found');
                 setTimeout(hideStatus, 4000);
@@ -3820,7 +3845,7 @@
 
             console.log(`[debug] dark cells (<${DARK_HOURS}h) under highest sun (alt ${bestAlt.toFixed(1)}\u00b0):`, counts);
             console.table(sample);
-            showStatus(`Debug: ${totalDark} dark cells \u2014 ${counts.near} self-shadow (red, occluder <${NEAR.toFixed(1)}m), ${counts.far} real (orange), ${counts.open} open (white).`);
+            showStatus(`Debug: ${totalDark} dark cells \u2014 red ${counts.near} self-shadow, purple ${counts.sheet} parallel-sheet (overlap), orange ${counts.far} real shadow, white ${counts.open} open.`);
             if (btn) btn.textContent = 'Debug: hide dark tiles';
         }
 

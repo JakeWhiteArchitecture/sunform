@@ -862,5 +862,53 @@ class TestUpwardFacingFilter:
         assert abs(ny) < self.MIN_UPWARD_NY, f"wall ny should be ~0, got {ny}"
 
 
+# ── Thin-slab sampling invariant (the "red self-shadow" regression) ──────
+class TestSlabSampling:
+    """A thin roof slab has a top face and an underside. Once the upward
+    filter is winding-independent, the underside is kept too. Sampling the
+    sun-ray origin from the underside buries it below the slab's top face,
+    which then self-shadows the cell (dark/red). The cell pipeline must
+    sample the TOPMOST fragment so the origin sits on the highest surface.
+    """
+
+    def _slab(self, thickness=0.3, extent=12.0):
+        # Top face across a wide roof at y=10; underside at y=10-thickness.
+        e = extent
+        top = [((0, 10, 0), (e, 10, 0), (e, 10, e)),
+               ((0, 10, 0), (e, 10, e), (0, 10, e))]
+        yb = 10 - thickness
+        bottom = [((0, yb, 0), (e, yb, 0), (e, yb, e)),
+                  ((0, yb, 0), (e, yb, e), (0, yb, e))]
+        return top, bottom
+
+    def _summer_dirs(self):
+        suns = get_sun_positions(51.5, -0.1, 2026, 6, 21, time_step=0.5)
+        return [sun_direction(s['azimuth'], s['altitude']) for s in suns]
+
+    def test_underside_sample_self_shadows(self):
+        top, bottom = self._slab()
+        slab = top + bottom
+        dirs = self._summer_dirs()
+        c = _tri_centroid(bottom[0])
+        origin = (c[0], c[1] + 0.01, c[2])  # underside + 10mm
+        lit = sum(1 for d in dirs
+                  if not ray_hits_any_triangle(origin, d, slab, min_t=1e-4))
+        assert lit < len(dirs), (
+            "sampling the slab underside must self-shadow under the top face")
+
+    def test_topmost_sample_is_lit(self):
+        top, bottom = self._slab()
+        slab = top + bottom
+        dirs = self._summer_dirs()
+        # Highest-centroid-Y fragment is on the top face.
+        topmost = max(top + bottom, key=lambda t: _tri_centroid(t)[1])
+        c = _tri_centroid(topmost)
+        origin = (c[0], c[1] + 0.01, c[2])
+        lit = sum(1 for d in dirs
+                  if not ray_hits_any_triangle(origin, d, slab, min_t=1e-4))
+        assert lit == len(dirs), (
+            f"topmost-fragment sample should be fully lit, got {lit}/{len(dirs)}")
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
