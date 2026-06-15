@@ -243,3 +243,25 @@ def ray_hits_real_occluder(
             continue  # the surface's own near-parallel geometry — not a real shadow
         return True
     return False
+
+
+# ── De-duplicate coincident faces (double-sided IFC geometry) ─────────────
+
+def dedupe_triangles(triangles, quant: int = 1000):
+    """Collapse faces sharing the same 3 vertices (within 1/quant metres, any
+    winding) to a single representative. Mirrors the JS dedupeTriangles used to
+    remove double-sided / inverted-twin faces before analysis and shadow casting.
+    """
+    seen = set()
+    out = []
+    for tri in triangles:
+        ks = sorted(
+            (round(v[0]*quant), round(v[1]*quant), round(v[2]*quant))
+            for v in tri
+        )
+        key = tuple(ks)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(tri)
+    return out

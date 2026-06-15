@@ -25,6 +25,7 @@ from sunform_engine import (
     compute_sun_hours_flat_grid,
     compute_sun_hours_array_style,
     ray_hits_real_occluder,
+    dedupe_triangles,
 )
 
 
@@ -972,6 +973,34 @@ class TestSelfShadowExclusion:
         assert plain < len(dirs), "sanity: the opposite pitch should partially self-shade here"
         assert excl == plain, (
             f"opposite-pitch self-shadow must be preserved: plain={plain}, excl={excl}")
+
+
+# ── Coincident-face de-duplication (double-sided IFC geometry) ───────────
+class TestDedupe:
+    """Collapse double-sided / inverted-twin faces, but never merge genuinely
+    distinct surfaces."""
+
+    def test_reverse_wound_twin_collapses(self):
+        a, b, c = (0, 0, 0), (1, 0, 0), (1, 0, 1)
+        tri = (a, b, c)
+        rev = (a, c, b)  # same 3 vertices, opposite winding
+        assert len(dedupe_triangles([tri, rev])) == 1
+
+    def test_distinct_offset_sheets_preserved(self):
+        t1 = ((0, 0, 0), (1, 0, 0), (1, 0, 1))
+        t2 = ((0, 0.5, 0), (1, 0.5, 0), (1, 0.5, 1))  # 0.5 m higher → distinct
+        assert len(dedupe_triangles([t1, t2])) == 2
+
+    def test_near_coincident_within_tolerance_collapses(self):
+        t1 = ((0, 0, 0), (1, 0, 0), (1, 0, 1))
+        t2 = ((0, 0.0005, 0), (1, 0.0005, 0), (1, 0.0005, 1))  # 0.5 mm → same
+        assert len(dedupe_triangles([t1, t2])) == 1
+
+    def test_no_false_merge_of_adjacent_faces(self):
+        # two triangles of one quad share an edge but are NOT the same face
+        t1 = ((0, 0, 0), (1, 0, 0), (1, 0, 1))
+        t2 = ((0, 0, 0), (1, 0, 1), (0, 0, 1))
+        assert len(dedupe_triangles([t1, t2])) == 2
 
 
 if __name__ == '__main__':

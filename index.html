@@ -2338,45 +2338,57 @@
             showStatus('Building BVH for shadow casters...');
             // Include ALL meshes in the shadow BVH — selected ground meshes
             // must NOT be excluded, otherwise nothing casts shadows when most
-            // or all meshes are selected for analysis.
-            // Self-shadowing is prevented by:
-            //   1. Ray origin offset along the surface normal (0.01 m)
-            //   2. min_t threshold (1e-4) in Möller-Trumbore intersection
-            const allVerts = [];
-            const allIdx = [];
-            let offset = 0;
+            // or all meshes are selected for analysis. Coincident duplicate
+            // faces (double-sided IFC geometry) are de-duplicated first so the
+            // shadow geometry isn't doubled. Self-shadowing on the surface's own
+            // near-coplanar geometry is handled by intersectsRealShadow.
+            const worldTris = [];
 
             for (const mesh of allMeshes) {
                 const geo = mesh.geometry;
                 const pos = geo.attributes.position.array;
                 const idx = geo.index ? geo.index.array : null;
 
-                // Apply world matrix to get transformed positions
                 mesh.updateWorldMatrix(true, false);
                 const wm = mesh.matrixWorld;
 
                 const numVerts = pos.length / 3;
+                const wv = new Float32Array(pos.length);
                 for (let v = 0; v < numVerts; v++) {
-                    const p = new THREE.Vector3(pos[v*3], pos[v*3+1], pos[v*3+2]);
-                    p.applyMatrix4(wm);
-                    allVerts.push(p.x, p.y, p.z);
+                    const p = new THREE.Vector3(pos[v*3], pos[v*3+1], pos[v*3+2]).applyMatrix4(wm);
+                    wv[v*3] = p.x; wv[v*3+1] = p.y; wv[v*3+2] = p.z;
                 }
 
-                if (idx) {
-                    for (let i = 0; i < idx.length; i++) {
-                        allIdx.push(idx[i] + offset);
-                    }
-                } else {
-                    for (let i = 0; i < numVerts; i++) {
-                        allIdx.push(i + offset);
-                    }
+                const faceCount = idx ? idx.length / 3 : numVerts / 3;
+                for (let f = 0; f < faceCount; f++) {
+                    const i0 = idx ? idx[f*3] : f*3;
+                    const i1 = idx ? idx[f*3+1] : f*3+1;
+                    const i2 = idx ? idx[f*3+2] : f*3+2;
+                    worldTris.push([
+                        [wv[i0*3], wv[i0*3+1], wv[i0*3+2]],
+                        [wv[i1*3], wv[i1*3+1], wv[i1*3+2]],
+                        [wv[i2*3], wv[i2*3+1], wv[i2*3+2]],
+                    ]);
                 }
-                offset += numVerts;
             }
 
-            if (allVerts.length > 0) {
-                shadowBVH = new BVH(new Float32Array(allVerts), new Uint32Array(allIdx));
-                console.log('Shadow BVH built:', (allIdx.length / 3) + ' triangles');
+            const before = worldTris.length;
+            const dedup = dedupeTriangles(worldTris);
+
+            if (dedup.length > 0) {
+                const positions = new Float32Array(dedup.length * 9);
+                const index = new Uint32Array(dedup.length * 3);
+                for (let i = 0; i < dedup.length; i++) {
+                    const t = dedup[i];
+                    for (let k = 0; k < 3; k++) {
+                        positions[i*9 + k*3]     = t[k][0];
+                        positions[i*9 + k*3 + 1] = t[k][1];
+                        positions[i*9 + k*3 + 2] = t[k][2];
+                        index[i*3 + k] = i*3 + k;
+                    }
+                }
+                shadowBVH = new BVH(positions, index);
+                console.log(`Shadow BVH built: ${dedup.length} triangles (de-duplicated ${before - dedup.length})`);
             } else {
                 shadowBVH = null;
             }
@@ -2853,6 +2865,39 @@
             return tris;
         }
 
+        // ─── DE-DUPLICATE COINCIDENT FACES ───
+        // Messy IFC meshes (web-ifc / IfcOpenShell) are frequently double-sided:
+        // each face has a reverse-wound twin at the same position. Both reach the
+        // pipeline once the upward filter is winding-independent, so every surface
+        // is represented twice → render z-fighting, doubled shadow geometry, and
+        // adjacent cells picking different copies (height-mismatch seams). Collapse
+        // faces that share the same 3 vertices (within 1 mm, either winding) to a
+        // single representative, preferring the upward-wound one.
+        function faceIsUpwardWound(tri) {
+            const [a, b, c] = tri;
+            const e1x = b[0]-a[0], e1z = b[2]-a[2];
+            const e2x = c[0]-a[0], e2z = c[2]-a[2];
+            return (e1z*e2x - e1x*e2z) >= 0;  // face-normal Y component
+        }
+
+        function dedupeTriangles(tris, quant = 1000) {
+            const map = new Map();
+            for (const tri of tris) {
+                const ks = [0, 1, 2].map(i =>
+                    Math.round(tri[i][0]*quant) + ',' +
+                    Math.round(tri[i][1]*quant) + ',' +
+                    Math.round(tri[i][2]*quant)).sort();
+                const key = ks[0] + '|' + ks[1] + '|' + ks[2];
+                const existing = map.get(key);
+                if (!existing) {
+                    map.set(key, tri);
+                } else if (!faceIsUpwardWound(existing) && faceIsUpwardWound(tri)) {
+                    map.set(key, tri);  // prefer the upward-wound twin
+                }
+            }
+            return Array.from(map.values());
+        }
+
         // ─── PREPARE GRID CELLS (merge + slice — done ONCE, cached) ───
         let cachedCellData = null;  // reused across seasons
         let cachedGridSize = null;
@@ -2919,15 +2964,24 @@
                 ]);
             }
 
+            // 1b. Collapse double-sided / coincident duplicate faces
+            const dedupedTris = dedupeTriangles(allMergedTris);
+            const removedDupes = allMergedTris.length - dedupedTris.length;
+            if (removedDupes > 0) {
+                showStatus(`Removed ${removedDupes} duplicate faces (${dedupedTris.length} kept)`);
+                await new Promise(r => setTimeout(r, 0));
+            }
+            console.log(`[prepareGridCells] de-dup: ${allMergedTris.length} -> ${dedupedTris.length} faces (${removedDupes} duplicates removed)`);
+
             // 2. Filter to upward-facing surfaces only (reject walls, soffits, bottoms)
-            showStatus(`Filtering ${allMergedTris.length} faces to upward-facing surfaces...`);
+            showStatus(`Filtering ${dedupedTris.length} faces to upward-facing surfaces...`);
             await new Promise(r => setTimeout(r, 0));
 
             const worldTris = [];
             const MIN_UPWARD_NY = 0.1;
             cachedDownwardTris = [];  // debug: rejected downward-facing faces (inverted-normal candidates)
-            for (let f = 0; f < allMergedTris.length; f++) {
-                const tri = allMergedTris[f];
+            for (let f = 0; f < dedupedTris.length; f++) {
+                const tri = dedupedTris[f];
                 const [a, b, c] = tri;
                 const e1x = b[0]-a[0], e1y = b[1]-a[1], e1z = b[2]-a[2];
                 const e2x = c[0]-a[0], e2y = c[1]-a[1], e2z = c[2]-a[2];
