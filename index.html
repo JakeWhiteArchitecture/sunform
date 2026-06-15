@@ -1127,6 +1127,11 @@
                         </select>
                     </div>
                 </div>
+                <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#aaa; margin-bottom:8px; cursor:pointer;">
+                    <input type="checkbox" id="self-shadow-excl" checked
+                           onclick="event.stopPropagation(); selfShadowExclusion = this.checked;">
+                    Ignore self-shadow from duplicate/overlapping surfaces
+                </label>
                 <button class="btn btn-run" id="run-btn" onclick="event.stopPropagation(); runAnalysis();">Run Analysis</button>
             </div>
         </div>
@@ -2570,6 +2575,68 @@
                 this._queryNearest(node.left, ox, oy, oz, dx, dy, dz, invDx, invDy, invDz, res);
                 this._queryNearest(node.right, ox, oy, oz, dx, dy, dz, invDx, invDy, invDz, res);
             }
+
+            // Like intersectsAny, but ignores the sampled surface's OWN
+            // near-coplanar geometry — a duplicate/overlapping copy of the very
+            // surface the cell sits on (what a doubled IFC mesh produces). A hit
+            // is skipped when it is within SELF_GAP perpendicular distance AND
+            // nearly parallel to the surface normal (snx,sny,snz). Genuine
+            // occluders (tilted, or distant parallel surfaces) still shadow.
+            intersectsRealShadow(ox, oy, oz, dx, dy, dz, snx, sny, snz) {
+                const invDx = 1 / dx, invDy = 1 / dy, invDz = 1 / dz;
+                return this._queryReal(this.root, ox, oy, oz, dx, dy, dz,
+                                       invDx, invDy, invDz, snx, sny, snz);
+            }
+
+            _queryReal(node, ox, oy, oz, dx, dy, dz, invDx, invDy, invDz, snx, sny, snz) {
+                let tmin, tmax, tymin, tymax, tzmin, tzmax;
+                if (invDx >= 0) { tmin = (node.minX - ox) * invDx; tmax = (node.maxX - ox) * invDx; }
+                else { tmin = (node.maxX - ox) * invDx; tmax = (node.minX - ox) * invDx; }
+                if (invDy >= 0) { tymin = (node.minY - oy) * invDy; tymax = (node.maxY - oy) * invDy; }
+                else { tymin = (node.maxY - oy) * invDy; tymax = (node.minY - oy) * invDy; }
+                if (tmin > tymax || tymin > tmax) return false;
+                if (tymin > tmin) tmin = tymin;
+                if (tymax < tmax) tmax = tymax;
+                if (invDz >= 0) { tzmin = (node.minZ - oz) * invDz; tzmax = (node.maxZ - oz) * invDz; }
+                else { tzmin = (node.maxZ - oz) * invDz; tzmax = (node.minZ - oz) * invDz; }
+                if (tmin > tzmax || tzmin > tmax) return false;
+                if (tzmin > tmin) tmin = tzmin;
+                if (tzmax < tmax) tmax = tzmax;
+                if (tmax < 0) return false;
+
+                if (node.tris) {
+                    const buf = node.tris;
+                    const SELF_GAP = 1.0, COPLANAR = 0.9;
+                    for (let i = 0; i < node.triCount; i++) {
+                        const o = i * 9;
+                        const e1x = buf[o+3] - buf[o], e1y = buf[o+4] - buf[o+1], e1z = buf[o+5] - buf[o+2];
+                        const e2x = buf[o+6] - buf[o], e2y = buf[o+7] - buf[o+1], e2z = buf[o+8] - buf[o+2];
+                        const px = dy * e2z - dz * e2y, py = dz * e2x - dx * e2z, pz = dx * e2y - dy * e2x;
+                        const det = e1x * px + e1y * py + e1z * pz;
+                        if (det > -1e-10 && det < 1e-10) continue;
+                        const invDet = 1 / det;
+                        const tx = ox - buf[o], ty = oy - buf[o+1], tz = oz - buf[o+2];
+                        const u = (tx * px + ty * py + tz * pz) * invDet;
+                        if (u < 0 || u > 1) continue;
+                        const qx = ty * e1z - tz * e1y, qy = tz * e1x - tx * e1z, qz = tx * e1y - ty * e1x;
+                        const v = (dx * qx + dy * qy + dz * qz) * invDet;
+                        if (v < 0 || u + v > 1) continue;
+                        const t = (e2x * qx + e2y * qy + e2z * qz) * invDet;
+                        if (t <= 1e-4) continue;
+                        // Self-coplanar exclusion: ignore near + parallel occluders.
+                        let nx = e1y*e2z - e1z*e2y, ny = e1z*e2x - e1x*e2z, nz = e1x*e2y - e1y*e2x;
+                        const nl = Math.sqrt(nx*nx + ny*ny + nz*nz) || 1;
+                        nx /= nl; ny /= nl; nz /= nl;
+                        const absdot = Math.abs(nx*snx + ny*sny + nz*snz);
+                        const gap = t * Math.abs(dx*nx + dy*ny + dz*nz);
+                        if (absdot > COPLANAR && gap < SELF_GAP) continue;
+                        return true;
+                    }
+                    return false;
+                }
+                return this._queryReal(node.left, ox, oy, oz, dx, dy, dz, invDx, invDy, invDz, snx, sny, snz)
+                    || this._queryReal(node.right, ox, oy, oz, dx, dy, dz, invDx, invDy, invDz, snx, sny, snz);
+            }
         }
 
         // ─── SUN POSITION CALCULATOR (pure JS — Spencer 1971) ───
@@ -2794,6 +2861,7 @@
         let debugDarkGroup = null;     // debug overlay: dark (~0h) cells classified by occluder distance
         let cachedDownwardTris = [];   // debug: faces rejected by the upward filter (inverted-normal candidates)
         let debugDownGroup = null;     // debug overlay group for rejected downward faces
+        let selfShadowExclusion = true; // ignore a surface's own near-coplanar (duplicate) geometry in the shadow test
 
         async function prepareGridCells() {
             const gridSize = parseFloat(document.getElementById('grid_resolution').value) || 1.0;
@@ -3240,7 +3308,10 @@
                         const oy = cd.centroid.y + cd.normal.y * 0.01;
                         const oz = cd.centroid.z + cd.normal.z * 0.01;
 
-                        if (!shadowBVH || !shadowBVH.intersectsAny(ox, oy, oz, dx, dy, dz)) {
+                        const blocked = shadowBVH && (selfShadowExclusion
+                            ? shadowBVH.intersectsRealShadow(ox, oy, oz, dx, dy, dz, cd.normal.x, cd.normal.y, cd.normal.z)
+                            : shadowBVH.intersectsAny(ox, oy, oz, dx, dy, dz));
+                        if (!blocked) {
                             cellSunHours[j] += timeStep;
                         }
                     }

@@ -204,3 +204,42 @@ def compute_sun_hours_array_style(
                     cell_sun_hours[j] += time_step
 
     return cell_sun_hours
+
+
+# ── Self-shadow exclusion (ignore a surface's own near-coplanar geometry) ──
+
+def ray_hits_real_occluder(
+    origin: Vec3, direction: Vec3, triangles: List[Triangle],
+    surface_normal: Vec3,
+    min_t: float = 1e-4, self_gap: float = 1.0, coplanar_dot: float = 0.9,
+) -> bool:
+    """Like ``ray_hits_any_triangle`` but ignores the surface's OWN near-coplanar
+    geometry — a duplicate/overlapping copy of the very surface the sample sits on.
+
+    A hit is skipped (not treated as shadow) when BOTH:
+      - the occluder is nearly parallel to ``surface_normal`` (|n·n| > coplanar_dot), and
+      - its perpendicular gap from the origin is small (< ``self_gap`` metres).
+
+    This removes spurious self/duplicate-sheet shadow while keeping genuine
+    obstructions: tilted occluders (low |n·n|) and distant parallel surfaces
+    (gap >= self_gap, e.g. a real higher roof) still count.
+    """
+    snx, sny, snz = surface_normal
+    for tri in triangles:
+        t = ray_triangle_intersect(origin, direction, tri, min_t=min_t)
+        if t is None:
+            continue
+        (ax, ay, az), (bx, by, bz), (cx, cy, cz) = tri
+        e1x, e1y, e1z = bx-ax, by-ay, bz-az
+        e2x, e2y, e2z = cx-ax, cy-ay, cz-az
+        nx = e1y*e2z - e1z*e2y
+        ny = e1z*e2x - e1x*e2z
+        nz = e1x*e2y - e1y*e2x
+        nlen = math.sqrt(nx*nx + ny*ny + nz*nz) or 1.0
+        nx, ny, nz = nx/nlen, ny/nlen, nz/nlen
+        absdot = abs(nx*snx + ny*sny + nz*snz)
+        gap = t * abs(direction[0]*nx + direction[1]*ny + direction[2]*nz)
+        if absdot > coplanar_dot and gap < self_gap:
+            continue  # the surface's own near-parallel geometry — not a real shadow
+        return True
+    return False

@@ -24,6 +24,7 @@ from sunform_engine import (
     ray_hits_any_triangle,
     compute_sun_hours_flat_grid,
     compute_sun_hours_array_style,
+    ray_hits_real_occluder,
 )
 
 
@@ -908,6 +909,69 @@ class TestSlabSampling:
                   if not ray_hits_any_triangle(origin, d, slab, min_t=1e-4))
         assert lit == len(dirs), (
             f"topmost-fragment sample should be fully lit, got {lit}/{len(dirs)}")
+
+
+# ── Self-shadow exclusion (the duplicate/overlapping-geometry fix) ───────
+class TestSelfShadowExclusion:
+    """A surface must not be shadowed by its OWN near-coplanar geometry (a
+    duplicate or overlapping copy of the very surface a cell sits on — what
+    a doubled IFC mesh produces). Genuine occluders must still shadow.
+    """
+
+    def _dirs(self):
+        return [sun_direction(s['azimuth'], s['altitude'])
+                for s in get_sun_positions(51.5, -0.1, 2026, 6, 21, 0.5)]
+
+    def _quad(self, y):
+        return [((-5, y, -5), (5, y, -5), (5, y, 5)),
+                ((-5, y, -5), (5, y, 5), (-5, y, 5))]
+
+    def test_duplicate_sheet_is_ignored(self):
+        dirs = self._dirs()
+        dup = self._quad(10.6)          # parallel copy 0.6 m above the cell
+        origin = (0, 10.01, 0)
+        up = (0.0, 1.0, 0.0)
+        plain = sum(1 for d in dirs if not ray_hits_any_triangle(origin, d, dup, min_t=1e-4))
+        excl = sum(1 for d in dirs if not ray_hits_real_occluder(origin, d, dup, up))
+        assert plain < len(dirs), "sanity: the duplicate sheet does shadow under the plain test"
+        assert excl == len(dirs), f"duplicate sheet must be ignored, got {excl}/{len(dirs)} lit"
+
+    def test_genuine_higher_roof_still_shadows(self):
+        dirs = self._dirs()
+        roof = self._quad(13.0)         # real parallel roof 3 m above
+        origin = (0, 10.01, 0)
+        up = (0.0, 1.0, 0.0)
+        excl = sum(1 for d in dirs if not ray_hits_real_occluder(origin, d, roof, up))
+        assert excl < len(dirs), "a genuine higher roof (gap >> self_gap) must still shadow"
+
+    def test_tilted_occluder_still_shadows(self):
+        dirs = self._dirs()
+        # near-vertical wall 0.5 m south — not parallel to the (up) surface
+        wall = [((-5, 9.5, 0.5), (5, 9.5, 0.5), (5, 12, 0.5)),
+                ((-5, 9.5, 0.5), (5, 12, 0.5), (-5, 12, 0.5))]
+        origin = (0, 10.01, 0)
+        up = (0.0, 1.0, 0.0)
+        excl = sum(1 for d in dirs if not ray_hits_real_occluder(origin, d, wall, up))
+        assert excl < len(dirs), "a tilted occluder (low |n·n|) must still shadow"
+
+    def test_opposite_roof_pitch_self_shadow_is_preserved(self):
+        """The concern: don't kill genuine self-shading. A north pitch shaded by
+        the opposite (south) pitch must read identically with the exclusion on,
+        because the two pitches are far from parallel (|nA·nB| ≈ 0.39)."""
+        def quad(p0, p1, p2, p3):
+            return [(p0, p1, p2), (p0, p2, p3)]
+        pitch_a = quad((0, 0, -3), (10, 0, -3), (10, 5, 0), (0, 5, 0))  # steep north
+        pitch_b = quad((0, 5, 0), (10, 5, 0), (10, 0, 3), (0, 0, 3))    # steep south
+        roof = pitch_a + pitch_b
+        n_a = _tri_up_normal(pitch_a[0])
+        origin = (5, 0.6 + n_a[1] * 0.01, -2.6 + n_a[2] * 0.01)  # low on north pitch
+        dirs = [sun_direction(s['azimuth'], s['altitude'])
+                for s in get_sun_positions(51.5, -0.1, 2026, 3, 20, 0.25)]
+        plain = sum(1 for d in dirs if not ray_hits_any_triangle(origin, d, roof, min_t=1e-4))
+        excl = sum(1 for d in dirs if not ray_hits_real_occluder(origin, d, roof, n_a))
+        assert plain < len(dirs), "sanity: the opposite pitch should partially self-shade here"
+        assert excl == plain, (
+            f"opposite-pitch self-shadow must be preserved: plain={plain}, excl={excl}")
 
 
 if __name__ == '__main__':
