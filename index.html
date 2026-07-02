@@ -3198,10 +3198,17 @@
                     const nLen = Math.sqrt(nx*nx + ny*ny + nz*nz);
                     if (nLen < 1e-10) return false; // degenerate
                     nx /= nLen; ny /= nLen; nz /= nLen;
-                    // Check normal alignment (allow flipped normals)
+                    // A dead-zone fragment is only INTERNAL STRUCTURE (insulation
+                    // / deck) if it is parallel to the top surface but on a
+                    // different plane. A NON-parallel fragment is a genuinely
+                    // different roof surface — the opposite pitch meeting at a
+                    // ridge/hip — and must be kept, or that side of the cell
+                    // renders bare. (That hole is invisible to the drop-logger,
+                    // because the cell still emits the top pitch.)
                     const dot = topNx*nx + topNy*ny + topNz*nz;
-                    if (Math.abs(dot) < COPLANAR_ANGLE_COS) return false;
-                    // Check all 3 vertices lie on the top plane
+                    if (Math.abs(dot) < COPLANAR_ANGLE_COS) return true;  // different roof surface (e.g. opposite pitch) — keep
+                    // Parallel to the top: keep only if on the same plane;
+                    // otherwise it's an internal offset layer — drop.
                     const dA = Math.abs(topNx*a[0] + topNy*a[1] + topNz*a[2] - topD);
                     const dB = Math.abs(topNx*b[0] + topNy*b[1] + topNz*b[2] - topD);
                     const dC = Math.abs(topNx*cc[0] + topNy*cc[1] + topNz*cc[2] - topD);
