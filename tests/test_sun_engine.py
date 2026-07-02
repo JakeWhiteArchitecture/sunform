@@ -1003,5 +1003,45 @@ class TestDedupe:
         assert len(dedupe_triangles([t1, t2])) == 2
 
 
+# ── Dead-zone filter: keep the opposite pitch at ridges/hips ─────────────
+class TestDeadZoneRidge:
+    """The per-cell dead-zone filter discards internal roof structure 0.05–0.5 m
+    below a cell's top surface. It must NOT discard the OPPOSITE PITCH at a
+    ridge/hip (a non-parallel surface in that band) — otherwise that side of the
+    cell renders bare, and because the cell still emits the top pitch the hole is
+    never recorded as a dropped cell. Mirrors the JS filter (fixed form).
+    """
+    TOP_TOL = 0.05
+    HEIGHT_TOL = 0.5
+    COS5 = math.cos(math.radians(5))
+
+    def _keep(self, top_n, frag_n, depth, on_plane):
+        if depth <= self.TOP_TOL or depth >= self.HEIGHT_TOL:
+            return True
+        dot = sum(top_n[i]*frag_n[i] for i in range(3))
+        if abs(dot) < self.COS5:
+            return True          # non-parallel → different roof surface → keep
+        return on_plane          # parallel → keep only if on the same plane
+
+    def test_opposite_pitch_in_dead_zone_is_kept(self):
+        top = (0.0, 0.866, -0.5)   # 30° pitch facing one way
+        opp = (0.0, 0.866, 0.5)    # opposite 30° pitch (|dot| ≈ 0.5)
+        assert self._keep(top, opp, depth=0.2, on_plane=False) is True
+
+    def test_internal_parallel_offset_layer_is_dropped(self):
+        top = (0.0, 0.866, -0.5)
+        # a parallel copy 0.2 m below, off the top plane = insulation/deck
+        assert self._keep(top, top, depth=0.2, on_plane=False) is False
+
+    def test_coplanar_same_plane_fragment_kept(self):
+        top = (0.0, 0.866, -0.5)
+        assert self._keep(top, top, depth=0.2, on_plane=True) is True
+
+    def test_far_below_and_top_band_always_kept(self):
+        top = (0.0, 0.866, -0.5)
+        assert self._keep(top, top, depth=0.01, on_plane=False) is True  # top band
+        assert self._keep(top, top, depth=0.9, on_plane=False) is True   # far below
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
