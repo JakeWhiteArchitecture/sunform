@@ -1154,9 +1154,6 @@
                     <button class="btn btn-secondary" id="pdf-btn" onclick="event.stopPropagation(); showDownloadConfirm('pdf');" style="flex:1;">Download PDF</button>
                 </div>
                 <button class="btn btn-secondary" onclick="event.stopPropagation(); resetWorkflow();" style="margin-top:8px;">New Analysis</button>
-                <button class="btn btn-secondary" id="debug-tiles-btn" onclick="event.stopPropagation(); toggleDebugTiles();" style="margin-top:8px;">Debug: show missing tiles</button>
-                <button class="btn btn-secondary" id="debug-dark-btn" onclick="event.stopPropagation(); toggleDebugDarkTiles();" style="margin-top:8px;">Debug: classify dark tiles</button>
-                <button class="btn btn-secondary" id="debug-down-btn" onclick="event.stopPropagation(); toggleDebugDownwardFaces();" style="margin-top:8px;">Debug: show inverted faces</button>
                 <div class="bug-report">
                     Results look wrong? <a id="bug-report-link" href="#">Report an issue</a>
                 </div>
@@ -1502,22 +1499,6 @@
             // Restore mesh visibility before cleanup
             showCalculationMeshes();
             clearRayProbe();
-            // Clear debug overlays if showing
-            for (const g of [debugDroppedGroup, debugDarkGroup, debugDownGroup]) {
-                if (!g) continue;
-                scene.remove(g);
-                g.traverse(c => {
-                    if (c.geometry) c.geometry.dispose();
-                    if (c.material) c.material.dispose();
-                });
-            }
-            debugDroppedGroup = null;
-            debugDarkGroup = null;
-            debugDownGroup = null;
-            const _setText = (id, t) => { const b = document.getElementById(id); if (b) b.textContent = t; };
-            _setText('debug-tiles-btn', 'Debug: show missing tiles');
-            _setText('debug-dark-btn', 'Debug: classify dark tiles');
-            _setText('debug-down-btn', 'Debug: show inverted faces');
             // Reset all state
             if (buildingGroup) {
                 scene.remove(buildingGroup);
@@ -1541,8 +1522,11 @@
             }
             seasonHeatmaps = {};
             seasonResults = {};
-            cachedCellData = null;
-            cachedGridSize = null;
+            cachedGeom = null;
+            cachedMaxEdge = null;
+            sharedGeomRef = null;
+            sharedPositionAttr = null;
+            sharedIndexAttr = null;
             visibleSeason = 'spring';
             document.getElementById('season-switcher').classList.remove('visible');
             clearAllHighlights();
@@ -2529,65 +2513,6 @@
                     || this._query(node.right, ox, oy, oz, dx, dy, dz, invDx, invDy, invDz);
             }
 
-            // Debug-only: nearest occluder along a ray. Returns { t, nx, ny, nz }
-            // (t = Infinity if none) where the normal is the hit triangle's
-            // geometric normal. Used to tell spurious self-shadow (occluder a few
-            // cm away) and parallel-sheet self-shadow (occluder a duplicate of
-            // the cell's own surface) from a genuine distant obstruction.
-            nearestHit(ox, oy, oz, dx, dy, dz) {
-                const invDx = 1 / dx, invDy = 1 / dy, invDz = 1 / dz;
-                const res = { t: Infinity, nx: 0, ny: 0, nz: 0 };
-                this._queryNearest(this.root, ox, oy, oz, dx, dy, dz, invDx, invDy, invDz, res);
-                return res;
-            }
-
-            _queryNearest(node, ox, oy, oz, dx, dy, dz, invDx, invDy, invDz, res) {
-                let tmin, tmax, tymin, tymax, tzmin, tzmax;
-                if (invDx >= 0) { tmin = (node.minX - ox) * invDx; tmax = (node.maxX - ox) * invDx; }
-                else { tmin = (node.maxX - ox) * invDx; tmax = (node.minX - ox) * invDx; }
-                if (invDy >= 0) { tymin = (node.minY - oy) * invDy; tymax = (node.maxY - oy) * invDy; }
-                else { tymin = (node.maxY - oy) * invDy; tymax = (node.minY - oy) * invDy; }
-                if (tmin > tymax || tymin > tmax) return;
-                if (tymin > tmin) tmin = tymin;
-                if (tymax < tmax) tmax = tymax;
-                if (invDz >= 0) { tzmin = (node.minZ - oz) * invDz; tzmax = (node.maxZ - oz) * invDz; }
-                else { tzmin = (node.maxZ - oz) * invDz; tzmax = (node.minZ - oz) * invDz; }
-                if (tmin > tzmax || tzmin > tmax) return;
-                if (tzmin > tmin) tmin = tzmin;
-                if (tzmax < tmax) tmax = tzmax;
-                if (tmax < 0 || tmin > res.t) return;  // behind ray, or farther than best
-
-                if (node.tris) {
-                    const buf = node.tris;
-                    for (let i = 0; i < node.triCount; i++) {
-                        const o = i * 9;
-                        const e1x = buf[o+3] - buf[o], e1y = buf[o+4] - buf[o+1], e1z = buf[o+5] - buf[o+2];
-                        const e2x = buf[o+6] - buf[o], e2y = buf[o+7] - buf[o+1], e2z = buf[o+8] - buf[o+2];
-                        const px = dy * e2z - dz * e2y, py = dz * e2x - dx * e2z, pz = dx * e2y - dy * e2x;
-                        const det = e1x * px + e1y * py + e1z * pz;
-                        if (det > -1e-10 && det < 1e-10) continue;
-                        const invDet = 1 / det;
-                        const tx = ox - buf[o], ty = oy - buf[o+1], tz = oz - buf[o+2];
-                        const u = (tx * px + ty * py + tz * pz) * invDet;
-                        if (u < 0 || u > 1) continue;
-                        const qx = ty * e1z - tz * e1y, qy = tz * e1x - tx * e1z, qz = tx * e1y - ty * e1x;
-                        const v = (dx * qx + dy * qy + dz * qz) * invDet;
-                        if (v < 0 || u + v > 1) continue;
-                        const t = (e2x * qx + e2y * qy + e2z * qz) * invDet;
-                        if (t > 1e-4 && t < res.t) {
-                            res.t = t;
-                            res.nx = e1y*e2z - e1z*e2y;
-                            res.ny = e1z*e2x - e1x*e2z;
-                            res.nz = e1x*e2y - e1y*e2x;
-                        }
-                    }
-                    return;
-                }
-
-                this._queryNearest(node.left, ox, oy, oz, dx, dy, dz, invDx, invDy, invDz, res);
-                this._queryNearest(node.right, ox, oy, oz, dx, dy, dz, invDx, invDy, invDz, res);
-            }
-
             // Like intersectsAny, but ignores the sampled surface's OWN
             // near-coplanar geometry — a duplicate/overlapping copy of the very
             // surface the cell sits on (what a doubled IFC mesh produces). A hit
@@ -2708,91 +2633,131 @@
             return new THREE.Vector3(ifcX, ifcZ, -ifcY).normalize();
         }
 
-        // ─── TRIANGLE-GRID CLIPPING HELPERS ───
-        function lerpVert(a, b, t) {
-            return [
-                a[0] + t * (b[0] - a[0]),
-                a[1] + t * (b[1] - a[1]),
-                a[2] + t * (b[2] - a[2]),
-            ];
-        }
+        // ─── EDGE-SPLIT SUBDIVISION ───
+        // Recursively bisect the longest edge of any triangle whose longest
+        // edge exceeds maxEdgeLength. Replaces the old grid clipping: no
+        // polygon slicing, no degenerate slivers, and adjacent triangles share
+        // edge midpoints exactly so vertices dedupe for smooth interpolation.
+        function subdivideToMaxEdge(triangles, maxEdgeLength) {
+            const maxE2 = maxEdgeLength * maxEdgeLength;
+            const out = [];
+            const stack = triangles.slice();
 
-        function triNormalComponents(a, b, c) {
-            return [
-                (b[1]-a[1])*(c[2]-a[2]) - (b[2]-a[2])*(c[1]-a[1]),
-                (b[2]-a[2])*(c[0]-a[0]) - (b[0]-a[0])*(c[2]-a[2]),
-                (b[0]-a[0])*(c[1]-a[1]) - (b[1]-a[1])*(c[0]-a[0]),
-            ];
-        }
-
-        // Reverse a triangle's vertex order if its winding disagrees with a
-        // reference normal. Used to keep split sub-triangles wound like their
-        // parent (the split otherwise reverses winding when the lone vertex is
-        // the middle one), without averaging or moving any vertex.
-        function orientToReference(sub, rx, ry, rz) {
-            const [a, b, c] = sub;
-            const [nx, ny, nz] = triNormalComponents(a, b, c);
-            if (nx*rx + ny*ry + nz*rz < 0) {
-                const t = sub[1]; sub[1] = sub[2]; sub[2] = t;
+            function child(a, b, c, parent) {
+                const t = [a, b, c];
+                if (parent.faceNormal) t.faceNormal = parent.faceNormal;
+                if (parent.groupNormal) t.groupNormal = parent.groupNormal;
+                return t;
             }
-        }
 
-        // Split an array of triangles along an axis-aligned plane (axis: 0=X, 2=Z)
-        function splitTrisAlongPlane(tris, axis, value) {
-            const result = [];
-            for (const tri of tris) {
-                const [a, b, c] = tri;
-                const da = a[axis] - value;
-                const db = b[axis] - value;
-                const dc = c[axis] - value;
-                const sa = da >= 0;
-                const sb = db >= 0;
-                const sc = dc >= 0;
+            while (stack.length) {
+                const tri = stack.pop();
+                const a = tri[0], b = tri[1], c = tri[2];
+                const ab = (b[0]-a[0])*(b[0]-a[0]) + (b[1]-a[1])*(b[1]-a[1]) + (b[2]-a[2])*(b[2]-a[2]);
+                const bc = (c[0]-b[0])*(c[0]-b[0]) + (c[1]-b[1])*(c[1]-b[1]) + (c[2]-b[2])*(c[2]-b[2]);
+                const ca = (a[0]-c[0])*(a[0]-c[0]) + (a[1]-c[1])*(a[1]-c[1]) + (a[2]-c[2])*(a[2]-c[2]);
 
-                if (sa === sb && sb === sc) {
-                    result.push(tri);
+                if (ab <= maxE2 && bc <= maxE2 && ca <= maxE2) {
+                    out.push(tri);
                     continue;
                 }
 
-                // Find the lone vertex (the one on its own side)
-                let lone, pair1, pair2, dLone, dPair1, dPair2;
-                if (sa !== sb && sa !== sc) {
-                    lone = a; pair1 = b; pair2 = c;
-                    dLone = da; dPair1 = db; dPair2 = dc;
-                } else if (sb !== sa && sb !== sc) {
-                    lone = b; pair1 = a; pair2 = c;
-                    dLone = db; dPair1 = da; dPair2 = dc;
+                if (ab >= bc && ab >= ca) {
+                    const m = [(a[0]+b[0])/2, (a[1]+b[1])/2, (a[2]+b[2])/2];
+                    stack.push(child(a, m, c, tri));
+                    stack.push(child(m, b, c, tri));
+                } else if (bc >= ca) {
+                    const m = [(b[0]+c[0])/2, (b[1]+c[1])/2, (b[2]+c[2])/2];
+                    stack.push(child(a, b, m, tri));
+                    stack.push(child(a, m, c, tri));
                 } else {
-                    lone = c; pair1 = a; pair2 = b;
-                    dLone = dc; dPair1 = da; dPair2 = db;
+                    const m = [(c[0]+a[0])/2, (c[1]+a[1])/2, (c[2]+a[2])/2];
+                    stack.push(child(a, b, m, tri));
+                    stack.push(child(m, b, c, tri));
                 }
-
-                const t1 = dLone / (dLone - dPair1);
-                const m1 = lerpVert(lone, pair1, t1);
-                const t2 = dLone / (dLone - dPair2);
-                const m2 = lerpVert(lone, pair2, t2);
-
-                // Lone side: 1 triangle
-                const t1Out = [lone, m1, m2];
-                // Pair side: quad = 2 triangles
-                const t2Out = [m1, pair1, pair2];
-                const t3Out = [m1, pair2, m2];
-                // Propagate face group normal through splits
-                if (tri.faceNormal) {
-                    t1Out.faceNormal = tri.faceNormal;
-                    t2Out.faceNormal = tri.faceNormal;
-                    t3Out.faceNormal = tri.faceNormal;
-                }
-                // Keep sub-triangle winding consistent with the parent
-                const [pnx, pny, pnz] = triNormalComponents(a, b, c);
-                orientToReference(t1Out, pnx, pny, pnz);
-                orientToReference(t2Out, pnx, pny, pnz);
-                orientToReference(t3Out, pnx, pny, pnz);
-                result.push(t1Out);
-                result.push(t2Out);
-                result.push(t3Out);
             }
-            return result;
+            return out;
+        }
+
+        // Build deduplicated per-vertex data from subdivided triangles:
+        //   positions Float32Array, index Uint32Array,
+        //   normals   Float32Array (area-weighted; faceNormal/groupNormal preferred),
+        //   areas     Float32Array (vertex Voronoi area: 1/3 of each adjacent triangle)
+        function buildVertexData(triangles) {
+            const QUANT = 10000; // 0.1mm quantisation so shared edge midpoints merge
+            const indexOf = new Map();
+            const positions = [];
+            const index = new Uint32Array(triangles.length * 3);
+            const normalAcc = [];
+            const areaAcc = [];
+
+            for (let t = 0; t < triangles.length; t++) {
+                const tri = triangles[t];
+                const a = tri[0], b = tri[1], c = tri[2];
+
+                const e1x = b[0]-a[0], e1y = b[1]-a[1], e1z = b[2]-a[2];
+                const e2x = c[0]-a[0], e2y = c[1]-a[1], e2z = c[2]-a[2];
+                const fnx = e1y*e2z - e1z*e2y;
+                const fny = e1z*e2x - e1x*e2z;
+                const fnz = e1x*e2y - e1y*e2x;
+                const fLen = Math.sqrt(fnx*fnx + fny*fny + fnz*fnz);
+                const area = fLen * 0.5;
+
+                // Reference normal for ray offsets: explicit face normal (walls),
+                // else coplanar-group consensus, else winding normal fixed upward.
+                let rnx, rny, rnz;
+                if (tri.faceNormal) {
+                    rnx = tri.faceNormal[0]; rny = tri.faceNormal[1]; rnz = tri.faceNormal[2];
+                } else if (tri.groupNormal) {
+                    const g = tri.groupNormal;
+                    const s = g.y >= 0 ? 1 : -1;
+                    rnx = s*g.x; rny = s*g.y; rnz = s*g.z;
+                } else if (fLen > 0) {
+                    const s = fny >= 0 ? 1 : -1;
+                    rnx = s*fnx/fLen; rny = s*fny/fLen; rnz = s*fnz/fLen;
+                } else {
+                    rnx = 0; rny = 1; rnz = 0;
+                }
+
+                for (let k = 0; k < 3; k++) {
+                    const v = tri[k];
+                    const key = Math.round(v[0]*QUANT) + ',' + Math.round(v[1]*QUANT) + ',' + Math.round(v[2]*QUANT);
+                    let vi = indexOf.get(key);
+                    if (vi === undefined) {
+                        vi = positions.length / 3;
+                        indexOf.set(key, vi);
+                        positions.push(v[0], v[1], v[2]);
+                        normalAcc.push(0, 0, 0);
+                        areaAcc.push(0);
+                    }
+                    index[t*3 + k] = vi;
+                    normalAcc[vi*3]   += rnx * area;
+                    normalAcc[vi*3+1] += rny * area;
+                    normalAcc[vi*3+2] += rnz * area;
+                    areaAcc[vi] += area / 3;
+                }
+            }
+
+            const vertexCount = positions.length / 3;
+            const normals = new Float32Array(vertexCount * 3);
+            for (let i = 0; i < vertexCount; i++) {
+                const nx = normalAcc[i*3], ny = normalAcc[i*3+1], nz = normalAcc[i*3+2];
+                const len = Math.sqrt(nx*nx + ny*ny + nz*nz);
+                if (len > 0) {
+                    normals[i*3] = nx/len; normals[i*3+1] = ny/len; normals[i*3+2] = nz/len;
+                } else {
+                    normals[i*3] = 0; normals[i*3+1] = 1; normals[i*3+2] = 0;
+                }
+            }
+
+            return {
+                positions: new Float32Array(positions),
+                index: index,
+                normals: normals,
+                areas: new Float32Array(areaAcc),
+                vertexCount: vertexCount,
+                triCount: triangles.length,
+            };
         }
 
         // Group coplanar triangles into NGon groups for reliable normals
@@ -2862,34 +2827,6 @@
             return groups;
         }
 
-        // Clip a single triangle against all grid lines it crosses
-        function clipTriToGrid(tri, gridSize) {
-            let tris = [tri];
-
-            // Find X grid lines this triangle crosses
-            const minX = Math.min(tri[0][0], tri[1][0], tri[2][0]);
-            const maxX = Math.max(tri[0][0], tri[1][0], tri[2][0]);
-            const firstX = Math.ceil(minX / gridSize) * gridSize;
-            for (let x = firstX; x < maxX; x += gridSize) {
-                tris = splitTrisAlongPlane(tris, 0, x);
-            }
-
-            // Find Z grid lines the (now-split) triangles cross
-            let minZ = Infinity, maxZ = -Infinity;
-            for (const t of tris) {
-                for (const v of t) {
-                    if (v[2] < minZ) minZ = v[2];
-                    if (v[2] > maxZ) maxZ = v[2];
-                }
-            }
-            const firstZ = Math.ceil(minZ / gridSize) * gridSize;
-            for (let z = firstZ; z < maxZ; z += gridSize) {
-                tris = splitTrisAlongPlane(tris, 2, z);
-            }
-
-            return tris;
-        }
-
         // ─── DE-DUPLICATE COINCIDENT FACES ───
         // Messy IFC meshes (web-ifc / IfcOpenShell) are frequently double-sided:
         // each face has a reverse-wound twin at the same position. Both reach the
@@ -2923,18 +2860,16 @@
             return Array.from(map.values());
         }
 
-        // ─── PREPARE GRID CELLS (merge + slice — done ONCE, cached) ───
-        let cachedCellData = null;  // reused across seasons
-        let cachedGridSize = null;
-        let cachedDroppedCells = [];   // debug: grid squares the roof covered but that produced no tile
-        let debugDroppedGroup = null;  // debug overlay group (toggled from Results)
-        let debugDarkGroup = null;     // debug overlay: dark (~0h) cells classified by occluder distance
-        let cachedDownwardTris = [];   // debug: faces rejected by the upward filter (inverted-normal candidates)
-        let debugDownGroup = null;     // debug overlay group for rejected downward faces
+        // ─── PREPARE ANALYSIS GEOMETRY (collect + subdivide + dedup, cached) ───
+        // Single pipeline for ALL surface orientations: selected ground/roof
+        // meshes AND selected vertical faces feed one triangle array, get
+        // subdivided together and analysed together. No grid cells.
+        let cachedGeom = null;      // { positions, index, normals, areas, vertexCount, triCount }
+        let cachedMaxEdge = null;
         let selfShadowExclusion = true; // ignore a surface's own near-coplanar (duplicate) geometry in the shadow test
 
-        async function prepareGridCells() {
-            const gridSize = parseFloat(document.getElementById('grid_resolution').value) || 1.0;
+        async function prepareAnalysisGeometry() {
+            const maxEdge = parseFloat(document.getElementById('grid_resolution').value) || 0.5;
 
             // Apply bbox filter if set
             let bboxFilter = null;
@@ -2949,477 +2884,184 @@
                 }
             }
 
-            // 1. Merge all selected ground mesh fragments into one unified set
-            showStatus('Merging ground mesh fragments...');
+            // 1. Collect ground/roof mesh triangles in world space
+            showStatus('Collecting surface triangles...');
             await new Promise(r => setTimeout(r, 0));
-            const mergedVerts = [];
-            const mergedIdx = [];
-            let vertOffset = 0;
 
+            const groundTris = [];
             for (const gm of selectedGroundMeshes) {
                 gm.updateWorldMatrix(true, false);
                 const wm = gm.matrixWorld;
                 const geo = gm.geometry;
                 const pos = geo.attributes.position.array;
                 const idx = geo.index ? geo.index.array : null;
-                const numVerts = pos.length / 3;
-
-                for (let v = 0; v < numVerts; v++) {
-                    const p = new THREE.Vector3(pos[v*3], pos[v*3+1], pos[v*3+2]).applyMatrix4(wm);
-                    mergedVerts.push(p.x, p.y, p.z);
+                const faceCount = idx ? idx.length / 3 : pos.length / 9;
+                for (let f = 0; f < faceCount; f++) {
+                    const i0 = idx ? idx[f*3]*3 : f*9;
+                    const i1 = idx ? idx[f*3+1]*3 : f*9+3;
+                    const i2 = idx ? idx[f*3+2]*3 : f*9+6;
+                    const a = new THREE.Vector3(pos[i0], pos[i0+1], pos[i0+2]).applyMatrix4(wm);
+                    const b = new THREE.Vector3(pos[i1], pos[i1+1], pos[i1+2]).applyMatrix4(wm);
+                    const c = new THREE.Vector3(pos[i2], pos[i2+1], pos[i2+2]).applyMatrix4(wm);
+                    groundTris.push([[a.x, a.y, a.z], [b.x, b.y, b.z], [c.x, c.y, c.z]]);
                 }
+            }
 
-                if (idx) {
-                    for (let i = 0; i < idx.length; i++) mergedIdx.push(idx[i] + vertOffset);
-                } else {
-                    for (let i = 0; i < numVerts; i++) mergedIdx.push(i + vertOffset);
+            // 1b. Collect selected vertical face triangles (world space, tagged
+            // with their outward face normal). Same pipeline from here on:
+            // walls receive real sun-hours analysis like any other surface.
+            const wallTris = [];
+            for (const vf of selectedVerticalFaces) {
+                vf.mesh.updateWorldMatrix(true, false);
+                const wm = vf.mesh.matrixWorld;
+                const vGeo = vf.mesh.geometry;
+                const vPos = vGeo.attributes.position.array;
+                const vIdx = vGeo.index ? vGeo.index.array : null;
+                const nMat = new THREE.Matrix3().getNormalMatrix(wm);
+                const wn = new THREE.Vector3(vf.normal[0], vf.normal[1], vf.normal[2])
+                    .applyMatrix3(nMat).normalize();
+                const faceNormal = [wn.x, wn.y, wn.z];
+                for (const f of vf.faceIndices) {
+                    const vi0 = vIdx ? vIdx[f*3]*3 : f*9;
+                    const vi1 = vIdx ? vIdx[f*3+1]*3 : f*9+3;
+                    const vi2 = vIdx ? vIdx[f*3+2]*3 : f*9+6;
+                    const a = new THREE.Vector3(vPos[vi0], vPos[vi0+1], vPos[vi0+2]).applyMatrix4(wm);
+                    const b = new THREE.Vector3(vPos[vi1], vPos[vi1+1], vPos[vi1+2]).applyMatrix4(wm);
+                    const c = new THREE.Vector3(vPos[vi2], vPos[vi2+1], vPos[vi2+2]).applyMatrix4(wm);
+                    const tri = [[a.x, a.y, a.z], [b.x, b.y, b.z], [c.x, c.y, c.z]];
+                    tri.faceNormal = faceNormal;
+                    wallTris.push(tri);
                 }
-                vertOffset += numVerts;
             }
 
-            // Build all merged triangles as arrays
-            const allMergedTris = [];
-            const faceCount = mergedIdx.length / 3;
-            for (let f = 0; f < faceCount; f++) {
-                const i0 = mergedIdx[f * 3], i1 = mergedIdx[f * 3 + 1], i2 = mergedIdx[f * 3 + 2];
-                allMergedTris.push([
-                    [mergedVerts[i0*3], mergedVerts[i0*3+1], mergedVerts[i0*3+2]],
-                    [mergedVerts[i1*3], mergedVerts[i1*3+1], mergedVerts[i1*3+2]],
-                    [mergedVerts[i2*3], mergedVerts[i2*3+1], mergedVerts[i2*3+2]],
-                ]);
-            }
+            // 2. De-duplicate coincident twins on the ground set
+            const dedupedGround = dedupeTriangles(groundTris);
+            console.log('[prepareAnalysisGeometry] ground de-dup: ' + groundTris.length + ' -> ' + dedupedGround.length + ' faces');
 
-            // 1b. Collapse double-sided / coincident duplicate faces
-            const dedupedTris = dedupeTriangles(allMergedTris);
-            const removedDupes = allMergedTris.length - dedupedTris.length;
-            if (removedDupes > 0) {
-                showStatus(`Removed ${removedDupes} duplicate faces (${dedupedTris.length} kept)`);
-                await new Promise(r => setTimeout(r, 0));
-            }
-            console.log(`[prepareGridCells] de-dup: ${allMergedTris.length} -> ${dedupedTris.length} faces (${removedDupes} duplicates removed)`);
-
-            // 2. Filter to upward-facing surfaces only (reject walls, soffits, bottoms)
-            showStatus(`Filtering ${dedupedTris.length} faces to upward-facing surfaces...`);
-            await new Promise(r => setTimeout(r, 0));
-
-            const worldTris = [];
+            // 3. Ground meshes: drop near-vertical faces (selecting a whole
+            // mesh brings its fascia/side faces along) and reorient inverted
+            // winding upward. Wall selections are explicit, so keep as-is.
             const MIN_UPWARD_NY = 0.1;
-            cachedDownwardTris = [];  // debug: any near-horizontal faces still wound downward after reorientation (expect ~0)
-            let reorientedCount = 0;
-            for (let f = 0; f < dedupedTris.length; f++) {
-                const tri = dedupedTris[f];
-                const [a, b, c] = tri;
+            const analysisTris = [];
+            for (const tri of dedupedGround) {
+                const a = tri[0], b = tri[1], c = tri[2];
                 const e1x = b[0]-a[0], e1y = b[1]-a[1], e1z = b[2]-a[2];
                 const e2x = c[0]-a[0], e2y = c[1]-a[1], e2z = c[2]-a[2];
                 const fnx = e1y*e2z - e1z*e2y;
                 const fny = e1z*e2x - e1x*e2z;
                 const fnz = e1x*e2y - e1y*e2x;
-                const fnLen = Math.sqrt(fnx*fnx + fny*fny + fnz*fnz);
-                if (fnLen === 0) continue;
-                const nyN = fny / fnLen;
-                // Reject only near-VERTICAL faces (walls). The analysis surface
-                // (the Step-3 selection) is upward-facing, so "up" is the correct
-                // outward direction. Any near-horizontal face wound downward is an
-                // inverted-winding roof triangle — reverse its vertex order so the
-                // winding is consistently up. No grouping, no averaging: each face
-                // keeps its exact position, only its cycle order may flip. Results
-                // are unchanged (the sampler already up-oriented per triangle);
-                // this just makes the geometry/overlay honest.
-                if (Math.abs(nyN) < MIN_UPWARD_NY) continue;  // wall — skip
-                if (nyN < 0) {
-                    const t = tri[1]; tri[1] = tri[2]; tri[2] = t;  // reverse winding → up
-                    reorientedCount++;
-                }
-                worldTris.push(tri);
+                const fLen = Math.sqrt(fnx*fnx + fny*fny + fnz*fnz);
+                if (fLen === 0) continue;
+                const nyN = fny / fLen;
+                if (Math.abs(nyN) < MIN_UPWARD_NY) continue; // wall face of a ground mesh
+                if (nyN < 0) { const t = tri[1]; tri[1] = tri[2]; tri[2] = t; }
+                analysisTris.push(tri);
             }
-            if (reorientedCount > 0) {
-                console.log(`[prepareGridCells] reoriented ${reorientedCount} inverted-winding faces to upward`);
+            for (const tri of wallTris) analysisTris.push(tri);
+
+            // Apply the bbox filter at triangle level (IFC plan coords: x, -z)
+            let filteredTris = analysisTris;
+            if (bboxFilter) {
+                filteredTris = analysisTris.filter(tri => {
+                    const cx = (tri[0][0] + tri[1][0] + tri[2][0]) / 3;
+                    const cz = (tri[0][2] + tri[1][2] + tri[2][2]) / 3;
+                    const ifcX = cx, ifcY = -cz;
+                    return ifcX >= bboxFilter.minX && ifcX <= bboxFilter.maxX &&
+                           ifcY >= bboxFilter.minY && ifcY <= bboxFilter.maxY;
+                });
             }
 
-            showStatus(`Upward faces: ${worldTris.length} of ${allMergedTris.length} kept`);
+            if (filteredTris.length === 0) {
+                throw new Error('No surface triangles found in the selected area');
+            }
 
-            // 2a. Group coplanar triangles for reliable normals
-            if (worldTris.length <= 5000) {
-                showStatus(`Grouping ${worldTris.length} triangles by coplanarity...`);
+            // 4. Coplanar consensus normals for ground triangles (small meshes)
+            const groundOnly = filteredTris.filter(t => !t.faceNormal);
+            if (groundOnly.length > 0 && groundOnly.length <= 5000) {
+                showStatus('Grouping ' + groundOnly.length + ' triangles by coplanarity...');
                 await new Promise(r => setTimeout(r, 0));
-                const ngonGroups = groupCoplanarFaces(worldTris);
-                showStatus(`Coplanar grouping: ${worldTris.length} triangles → ${ngonGroups.length} groups`);
-            } else {
-                console.warn('Mesh too large for coplanar grouping, using raw normals:', worldTris.length, 'triangles');
-                for (const tri of worldTris) {
-                    const [a, b, c] = tri;
-                    const e1x = b[0]-a[0], e1y = b[1]-a[1], e1z = b[2]-a[2];
-                    const e2x = c[0]-a[0], e2y = c[1]-a[1], e2z = c[2]-a[2];
-                    const nx = e1y*e2z - e1z*e2y;
-                    const ny = e1z*e2x - e1x*e2z;
-                    const nz = e1x*e2y - e1y*e2x;
-                    const len = Math.sqrt(nx*nx + ny*ny + nz*nz);
-                    if (len > 0) {
-                        tri.groupNormal = { x: nx/len, y: ny/len, z: nz/len };
-                    } else {
-                        tri.groupNormal = { x: 0, y: 1, z: 0 };
-                    }
-                }
+                groupCoplanarFaces(groundOnly);
             }
 
-            // 2b. Vertical face triangles — SKIPPED here, handled in Phase 2
-            // (see runVerticalWallPhase2)
-            if (selectedVerticalFaces.length > 0) {
-                showStatus(`Vertical faces (${selectedVerticalFaces.length}) deferred to Phase 2`);
-            }
-
-            // 3. Slice every triangle along grid lines
-            showStatus(`Slicing ${worldTris.length} triangles along ${gridSize}m grid...`);
+            // 5. Subdivide so no edge exceeds maxEdge
+            showStatus('Subdividing ' + filteredTris.length + ' triangles to ' + maxEdge + 'm edges...');
             await new Promise(r => setTimeout(r, 0));
+            const subTris = subdivideToMaxEdge(filteredTris, maxEdge);
 
-            const cells = new Map();
-            for (let ti = 0; ti < worldTris.length; ti++) {
-                const subTris = clipTriToGrid(worldTris[ti], gridSize);
-                for (const st of subTris) {
-                    st.groupNormal = worldTris[ti].groupNormal;
-                    const [a, b, c] = st;
-                    const cx = (a[0] + b[0] + c[0]) / 3;
-                    const cy = (a[1] + b[1] + c[1]) / 3;
-                    const cz = (a[2] + b[2] + c[2]) / 3;
+            // 6. Deduplicate shared vertices and build per-vertex data
+            showStatus('Building vertex data from ' + subTris.length + ' triangles...');
+            await new Promise(r => setTimeout(r, 0));
+            const geom = buildVertexData(subTris);
 
-                    if (bboxFilter) {
-                        const ifcX = cx, ifcY = -cz;
-                        if (ifcX < bboxFilter.minX || ifcX > bboxFilter.maxX ||
-                            ifcY < bboxFilter.minY || ifcY > bboxFilter.maxY) continue;
-                    }
-
-                    const col = Math.floor(cx / gridSize);
-                    const row = Math.floor(cz / gridSize);
-
-                    const e1x = b[0]-a[0], e1y = b[1]-a[1], e1z = b[2]-a[2];
-                    const e2x = c[0]-a[0], e2y = c[1]-a[1], e2z = c[2]-a[2];
-                    const nx = e1y*e2z - e1z*e2y;
-                    const ny = e1z*e2x - e1x*e2z;
-                    const nz = e1x*e2y - e1y*e2x;
-                    const len = Math.sqrt(nx*nx + ny*ny + nz*nz);
-                    const area = len * 0.5;
-
-                    const key = col + ',' + row;
-
-                    if (!cells.has(key)) {
-                        cells.set(key, { tris: [], area: 0,
-                            sumCx: 0, sumCy: 0, sumCz: 0,
-                            sumNx: 0, sumNy: 0, sumNz: 0 });
-                    }
-                    const cell = cells.get(key);
-                    cell.tris.push(st);
-                    cell.area += area;
-                    cell.sumCx += cx * area;
-                    cell.sumCy += cy * area;
-                    cell.sumCz += cz * area;
-                    if (len > 0 && st.groupNormal) {
-                        cell.sumNx += st.groupNormal.x * area;
-                        cell.sumNy += st.groupNormal.y * area;
-                        cell.sumNz += st.groupNormal.z * area;
-                    } else if (len > 0) {
-                        const sign = ny >= 0 ? 1 : -1;
-                        cell.sumNx += sign * (nx / len) * area;
-                        cell.sumNy += sign * (ny / len) * area;
-                        cell.sumNz += sign * (nz / len) * area;
-                    }
-                }
-                if (ti % 500 === 0 && ti > 0) {
-                    showStatus(`Slicing triangles... ${Math.round(ti / worldTris.length * 100)}%`);
-                    await new Promise(r => setTimeout(r, 0));
-                }
-            }
-
-            if (cells.size === 0) {
-                throw new Error('No grid cells found on the selected ground meshes');
-            }
-
-            const cellKeys = Array.from(cells.keys());
-            const cellData = [];
-            const HEIGHT_TOL = 0.5; // metres — triangles within this band form one layer
-
-            // Debug: record grid squares that had upward-facing roof triangles
-            // but produced no heatmap tile (visible holes). Tagged with the
-            // reason they dropped so they can be visualised from the Results step.
-            cachedDroppedCells = [];
-            const recordDropped = (cell, key, reason) => {
-                const a = cell.area || 1;
-                const [cs, rs] = key.split(',');
-                cachedDroppedCells.push({
-                    x: cell.sumCx / a, y: cell.sumCy / a, z: cell.sumCz / a,
-                    col: parseInt(cs, 10), row: parseInt(rs, 10), reason,
-                });
-            };
-
-            for (const k of cellKeys) {
-                const c = cells.get(k);
-                const beforeLen = cellData.length;
-
-                // Sort triangles by centroid Y (height) descending
-                const trisWithY = c.tris.map(tri => {
-                    const [a, b, cc] = tri;
-                    return { tri, y: (a[1] + b[1] + cc[1]) / 3 };
-                });
-                trisWithY.sort((a, b) => b.y - a.y);
-
-                // Filter out internal roof layers: keep only the top surface
-                // and anything more than HEIGHT_TOL below it (e.g. terrain).
-                // Triangles in the "dead zone" (between TOP_SURFACE_TOL and
-                // HEIGHT_TOL below the peak) are discarded as internal roof
-                // structure (insulation, structural deck, etc.) — UNLESS they
-                // are coplanar with the top surface (i.e. same sloped roof plane).
-                const TOP_SURFACE_TOL = 0.05; // 5 cm — thickness of "top surface"
-                const topY = trisWithY[0].y;
-
-                // Compute the plane of the topmost triangle for coplanarity test
-                const topTri = trisWithY[0].tri;
-                const [tA, tB, tC] = topTri;
-                const te1x = tB[0]-tA[0], te1y = tB[1]-tA[1], te1z = tB[2]-tA[2];
-                const te2x = tC[0]-tA[0], te2y = tC[1]-tA[1], te2z = tC[2]-tA[2];
-                let topNx = te1y*te2z - te1z*te2y;
-                let topNy = te1z*te2x - te1x*te2z;
-                let topNz = te1x*te2y - te1y*te2x;
-                const topNLen = Math.sqrt(topNx*topNx + topNy*topNy + topNz*topNz);
-                if (topNLen > 0) { topNx /= topNLen; topNy /= topNLen; topNz /= topNLen; }
-                const topD = topNx*tA[0] + topNy*tA[1] + topNz*tA[2];
-                const COPLANAR_ANGLE_COS = Math.cos(5 * Math.PI / 180); // 5° tolerance
-                const COPLANAR_DIST_TOL = 0.02; // 2cm plane distance tolerance
-
-                const filtered = trisWithY.filter(t => {
-                    const depth = topY - t.y;
-                    // Always keep top surface and far-below terrain
-                    if (depth <= TOP_SURFACE_TOL || depth >= HEIGHT_TOL) return true;
-                    // Dead zone — but keep if coplanar with top surface
-                    const [a, b, cc] = t.tri;
-                    const e1x = b[0]-a[0], e1y = b[1]-a[1], e1z = b[2]-a[2];
-                    const e2x = cc[0]-a[0], e2y = cc[1]-a[1], e2z = cc[2]-a[2];
-                    let nx = e1y*e2z - e1z*e2y;
-                    let ny = e1z*e2x - e1x*e2z;
-                    let nz = e1x*e2y - e1y*e2x;
-                    const nLen = Math.sqrt(nx*nx + ny*ny + nz*nz);
-                    if (nLen < 1e-10) return false; // degenerate
-                    nx /= nLen; ny /= nLen; nz /= nLen;
-                    // A dead-zone fragment is only INTERNAL STRUCTURE (insulation
-                    // / deck) if it is parallel to the top surface but on a
-                    // different plane. A NON-parallel fragment is a genuinely
-                    // different roof surface — the opposite pitch meeting at a
-                    // ridge/hip — and must be kept, or that side of the cell
-                    // renders bare. (That hole is invisible to the drop-logger,
-                    // because the cell still emits the top pitch.)
-                    const dot = topNx*nx + topNy*ny + topNz*nz;
-                    if (Math.abs(dot) < COPLANAR_ANGLE_COS) return true;  // different roof surface (e.g. opposite pitch) — keep
-                    // Parallel to the top: keep only if on the same plane;
-                    // otherwise it's an internal offset layer — drop.
-                    const dA = Math.abs(topNx*a[0] + topNy*a[1] + topNz*a[2] - topD);
-                    const dB = Math.abs(topNx*b[0] + topNy*b[1] + topNz*b[2] - topD);
-                    const dC = Math.abs(topNx*cc[0] + topNy*cc[1] + topNz*cc[2] - topD);
-                    return dA < COPLANAR_DIST_TOL && dB < COPLANAR_DIST_TOL && dC < COPLANAR_DIST_TOL;
-                });
-
-                if (filtered.length === 0) {
-                    recordDropped(c, k, 'all-internal/dead-zone');
-                    continue;
-                }
-
-                // Cluster into distinct height layers: any gap > HEIGHT_TOL starts a new layer
-                const layers = [];
-                let currentLayer = [filtered[0]];
-                let layerMaxY = filtered[0].y;
-
-                for (let i = 1; i < filtered.length; i++) {
-                    if (filtered[i].y < layerMaxY - HEIGHT_TOL) {
-                        // New layer — gap is too large
-                        layers.push(currentLayer);
-                        currentLayer = [filtered[i]];
-                        layerMaxY = filtered[i].y;
-                    } else {
-                        currentLayer.push(filtered[i]);
-                    }
-                }
-                layers.push(currentLayer);
-
-                // Create a cell entry for each layer, sub-splitting by normal
-                // direction so hip-edge cells don't blend two roof pitches.
-                const COS_NORMAL_TOL = Math.cos(30 * Math.PI / 180); // ~0.866
-
-                for (let li = 0; li < layers.length; li++) {
-                    const layer = layers[li];
-
-                    // Compute per-triangle normals for clustering
-                    const triNormals = layer.map(({ tri }) => {
-                        const [a, b, cc] = tri;
-                        const e1x = b[0]-a[0], e1y = b[1]-a[1], e1z = b[2]-a[2];
-                        const e2x = cc[0]-a[0], e2y = cc[1]-a[1], e2z = cc[2]-a[2];
-                        let nx = e1y*e2z - e1z*e2y;
-                        let ny = e1z*e2x - e1x*e2z;
-                        let nz = e1x*e2y - e1y*e2x;
-                        const len = Math.sqrt(nx*nx + ny*ny + nz*nz);
-                        if (len > 0) {
-                            // Ensure consistent orientation (upward-facing)
-                            const sign = ny >= 0 ? 1 : -1;
-                            nx = sign * nx / len;
-                            ny = sign * ny / len;
-                            nz = sign * nz / len;
-                        }
-                        return { nx, ny, nz, len };
-                    });
-
-                    // Greedy clustering: group triangles whose normals are
-                    // within COS_NORMAL_TOL of the cluster's seed normal
-                    const assigned = new Uint8Array(layer.length);
-                    const normalClusters = [];
-
-                    for (let i = 0; i < layer.length; i++) {
-                        if (assigned[i]) continue;
-                        const seed = triNormals[i];
-                        if (seed.len === 0) { assigned[i] = 1; continue; }
-                        const cluster = [i];
-                        assigned[i] = 1;
-
-                        for (let j = i + 1; j < layer.length; j++) {
-                            if (assigned[j]) continue;
-                            const tn = triNormals[j];
-                            if (tn.len === 0) continue;
-                            const dot = seed.nx*tn.nx + seed.ny*tn.ny + seed.nz*tn.nz;
-                            if (dot >= COS_NORMAL_TOL) {
-                                cluster.push(j);
-                                assigned[j] = 1;
-                            }
-                        }
-                        normalClusters.push(cluster);
-                    }
-
-                    // Emit a cell entry per normal cluster
-                    for (let ci = 0; ci < normalClusters.length; ci++) {
-                        const clusterIdxs = normalClusters[ci];
-                        let area = 0;
-                        const clusterTris = [];
-
-                        // Sample the sun-ray origin from the TOPMOST (highest
-                        // centroid-Y) fragment in the cluster. Two failure modes
-                        // motivate this:
-                        //   1. Hip/ridge: averaging fragments from two pitches
-                        //      lands the origin in the valley *below* the fold,
-                        //      buried in the roof solid → reads 0h (black tile).
-                        //   2. Thin slab: a slab's underside (kept once the filter
-                        //      became winding-independent) can have the largest
-                        //      area, so largest-area sampling puts the origin
-                        //      *below* the slab's top face → self-shadow (dark).
-                        // A single fragment's centroid is always exactly on the
-                        // surface, and taking the highest one guarantees nothing
-                        // in the cluster sits above the origin.
-                        let bestY = -Infinity;
-                        let sampleC = null, sampleN = null;
-
-                        for (const idx of clusterIdxs) {
-                            const { tri } = layer[idx];
-                            const [a, b, cc] = tri;
-                            clusterTris.push(tri);
-                            const tn = triNormals[idx];
-                            area += tn.len * 0.5;
-                            const cy = (a[1] + b[1] + cc[1]) / 3;
-                            if (cy > bestY) {
-                                bestY = cy;
-                                sampleC = {
-                                    x: (a[0] + b[0] + cc[0]) / 3,
-                                    y: cy,
-                                    z: (a[2] + b[2] + cc[2]) / 3,
-                                };
-                                // Offset direction = this fragment's own upward
-                                // normal (triNormals are already sign-flipped to
-                                // ny >= 0, i.e. outward for an upward-facing roof).
-                                sampleN = (tn.len > 0)
-                                    ? { x: tn.nx, y: tn.ny, z: tn.nz }
-                                    : { x: 0, y: 1, z: 0 };
-                            }
-                        }
-
-                        if (!sampleC) continue; // all-degenerate cluster
-                        const suffix = (li === 0 && ci === 0) ? '' :
-                            ':L' + li + (ci > 0 ? 'N' + ci : '');
-                        cellData.push({
-                            key: k + suffix,
-                            tris: clusterTris,
-                            area: area,
-                            centroid: sampleC,
-                            normal: (sampleN.y > 0) ? sampleN : { x: 0, y: 1, z: 0 },
-                        });
-                    }
-                }
-
-                // Cell covered roof but every layer/cluster dropped → visible hole
-                if (cellData.length === beforeLen) {
-                    recordDropped(c, k, 'degenerate-or-filtered');
-                }
-            }
-
-            console.log(`[prepareGridCells] cellData: ${cellData.length} cells from ${worldTris.length} triangles`);
-            console.log(`[prepareGridCells] dropped (no tile): ${cachedDroppedCells.length} cells`);
-
-            cachedCellData = cellData;
-            cachedGridSize = gridSize;
-            showStatus(`Grid prepared: ${cellData.length} cells at ${gridSize}m resolution`);
-            return cellData;
+            console.log('[prepareAnalysisGeometry] ' + geom.vertexCount + ' unique vertices, ' + geom.triCount + ' triangles');
+            cachedGeom = geom;
+            cachedMaxEdge = maxEdge;
+            showStatus('Geometry prepared: ' + geom.vertexCount + ' analysis points at ' + maxEdge + 'm resolution');
+            return geom;
         }
 
-        // ─── RAY CAST SUN HOURS (uses cached cell data) ───
-        async function runTerrainAnalysis(latitude, longitude, timeStep, dateStr, cellData) {
+        // ─── RAY CAST SUN HOURS (per unique vertex) ───
+        async function runTerrainAnalysis(latitude, longitude, timeStep, dateStr, geom) {
 
             const sunPositions = getSunPositions(latitude, longitude, dateStr, timeStep);
             if (sunPositions.length === 0) {
                 throw new Error('No sun positions above horizon for given date/location');
             }
 
-            const gridSize = cachedGridSize;
-
-            // Ray-cast sun hours per grid cell
-            const totalRays = cellData.length * sunPositions.length;
-            showStatus(`Casting ${totalRays.toLocaleString()} rays (${cellData.length} cells x ${sunPositions.length} sun positions)...`);
+            const n = geom.vertexCount;
+            const totalRays = n * sunPositions.length;
+            showStatus('Casting ' + totalRays.toLocaleString() + ' rays (' + n + ' vertices x ' + sunPositions.length + ' sun positions)...');
 
             const sunDirs = sunPositions.map(sp => {
                 const v = sunDirection(sp.azimuth, sp.altitude);
                 return [v.x, v.y, v.z];
             });
 
-            const cellSunHours = new Float32Array(cellData.length);
+            const pos = geom.positions;
+            const nor = geom.normals;
+            const vertexSunHours = new Float32Array(n);
             let raysProcessed = 0;
             const BATCH_SIZE = 2000;
+            const OFF = 0.01; // 10mm along the vertex normal
 
             for (let sunIdx = 0; sunIdx < sunDirs.length; sunIdx++) {
-                const [dx, dy, dz] = sunDirs[sunIdx];
+                const dx = sunDirs[sunIdx][0], dy = sunDirs[sunIdx][1], dz = sunDirs[sunIdx][2];
 
-                for (let i = 0; i < cellData.length; i += BATCH_SIZE) {
-                    const end = Math.min(i + BATCH_SIZE, cellData.length);
+                for (let i = 0; i < n; i += BATCH_SIZE) {
+                    const end = Math.min(i + BATCH_SIZE, n);
 
                     for (let j = i; j < end; j++) {
-                        const cd = cellData[j];
-                        const ox = cd.centroid.x + cd.normal.x * 0.01;
-                        const oy = cd.centroid.y + cd.normal.y * 0.01;
-                        const oz = cd.centroid.z + cd.normal.z * 0.01;
+                        const nx = nor[j*3], ny = nor[j*3+1], nz = nor[j*3+2];
+                        const ox = pos[j*3] + nx * OFF;
+                        const oy = pos[j*3+1] + ny * OFF;
+                        const oz = pos[j*3+2] + nz * OFF;
 
                         const blocked = shadowBVH && (selfShadowExclusion
-                            ? shadowBVH.intersectsRealShadow(ox, oy, oz, dx, dy, dz, cd.normal.x, cd.normal.y, cd.normal.z)
+                            ? shadowBVH.intersectsRealShadow(ox, oy, oz, dx, dy, dz, nx, ny, nz)
                             : shadowBVH.intersectsAny(ox, oy, oz, dx, dy, dz));
                         if (!blocked) {
-                            cellSunHours[j] += timeStep;
+                            vertexSunHours[j] += timeStep;
                         }
                     }
 
                     raysProcessed += (end - i);
                     if (raysProcessed % (BATCH_SIZE * 4) === 0) {
                         const pct = Math.round(raysProcessed / totalRays * 100);
-                        showStatus(`Ray casting... ${pct}%`);
+                        showStatus('Ray casting... ' + pct + '%');
                         await new Promise(r => setTimeout(r, 0));
                     }
                 }
             }
 
-            // Compute summary statistics
+            // Summary statistics: vertex Voronoi-area weighting (one-third of
+            // each adjacent triangle's area per vertex)
+            const areas = geom.areas;
             let totalArea = 0;
             let minHours = Infinity, maxHours = -Infinity;
             let sumHoursWeighted = 0;
-            for (let i = 0; i < cellData.length; i++) {
-                const a = cellData[i].area;
-                const h = cellSunHours[i];
+            for (let i = 0; i < n; i++) {
+                const a = areas[i];
+                const h = vertexSunHours[i];
                 totalArea += a;
                 sumHoursWeighted += h * a;
                 if (h < minHours) minHours = h;
@@ -3428,13 +3070,13 @@
             const avgHours = totalArea > 0 ? sumHoursWeighted / totalArea : 0;
 
             return {
-                cellData,
-                cellSunHours,
-                gridSize,
-                sunPositions,
+                geom: geom,
+                vertexSunHours: vertexSunHours,
+                maxEdge: cachedMaxEdge,
+                sunPositions: sunPositions,
                 summary: {
                     area_total: totalArea.toFixed(1),
-                    cells_total: cellData.length,
+                    cells_total: n,
                     min_hours: Math.round(minHours * 10) / 10,
                     max_hours: Math.round(maxHours * 10) / 10,
                     avg_hours: Math.round(avgHours * 10) / 10,
@@ -3470,224 +3112,88 @@
             return [c[1], c[2], c[3]];
         }
 
-        // ─── CREATE HEATMAP GROUP (vertical lift above surface) ───
+        // ─── CREATE HEATMAP (shader mesh, per-pixel colour ramp) ───
+        // One BufferGeometry per season sharing position/index attributes;
+        // only the per-vertex sunHours attribute differs. The fragment shader
+        // maps the interpolated sunHours value to the HEAT_COLOURS ramp per
+        // pixel, so contours are smooth regardless of triangle shape. Original
+        // vertex positions are used (no lift) since the calculation meshes are
+        // hidden while results are showing.
+        let sharedPositionAttr = null;
+        let sharedIndexAttr = null;
+        let sharedGeomRef = null;
+
+        const HEAT_VERTEX_SHADER = [
+            'attribute float sunHours;',
+            'varying float vSun;',
+            'void main() {',
+            '    vSun = sunHours;',
+            '    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
+            '}',
+        ].join('\n');
+
+        // GLSL port of lerpColour / HEAT_COLOURS
+        const HEAT_FRAGMENT_SHADER = [
+            'uniform float opacity;',
+            'varying float vSun;',
+            'vec3 heatColour(float h) {',
+            '    vec3 c0 = vec3(0.15, 0.0, 0.25);',
+            '    vec3 c1 = vec3(0.8, 0.1, 0.1);',
+            '    vec3 c2 = vec3(1.0, 0.5, 0.0);',
+            '    vec3 c3 = vec3(1.0, 0.85, 0.0);',
+            '    vec3 c4 = vec3(1.0, 1.0, 0.2);',
+            '    vec3 c6 = vec3(1.0, 1.0, 0.8);',
+            '    if (h <= 0.0) return c0;',
+            '    if (h < 1.0) return mix(c0, c1, h);',
+            '    if (h < 2.0) return mix(c1, c2, h - 1.0);',
+            '    if (h < 3.0) return mix(c2, c3, h - 2.0);',
+            '    if (h < 4.0) return mix(c3, c4, h - 3.0);',
+            '    if (h < 6.0) return mix(c4, c6, (h - 4.0) / 2.0);',
+            '    return c6;',
+            '}',
+            'void main() {',
+            '    gl_FragColor = vec4(heatColour(vSun), opacity);',
+            '}',
+        ].join('\n');
+
         function createHeatmapGroup(results) {
             const group = new THREE.Group();
             group.name = 'heatmap_' + (results.season || 'default');
-            if (!results.cellData || results.cellData.length === 0) return group;
+            const geomData = results.geom;
+            if (!geomData || geomData.vertexCount === 0) return group;
 
-            // Lift tiles straight up (+Y) by a constant amount, NOT along each
-            // cell's own normal. Adjacent cells share edge coordinates; a
-            // per-normal offset shoves those shared edges in different
-            // directions at folds (hips/ridges), tearing thin seams. A constant
-            // direction moves shared edges identically, so tiles stay welded.
-            const off = 0.02; // 20mm vertical lift
-
-            const tilePositions = [];
-            const tileColors = [];
-
-            for (let i = 0; i < results.cellData.length; i++) {
-                const cd = results.cellData[i];
-                const hours = results.cellSunHours[i];
-                const [r, g, b] = lerpColour(hours);
-
-                for (const tri of cd.tris) {
-                    for (const v of tri) {
-                        tilePositions.push(v[0], v[1] + off, v[2]);
-                        tileColors.push(r, g, b);
-                    }
-                }
+            // Share position/index buffers across seasons
+            if (sharedGeomRef !== geomData) {
+                sharedPositionAttr = new THREE.BufferAttribute(geomData.positions, 3);
+                sharedIndexAttr = new THREE.BufferAttribute(geomData.index, 1);
+                sharedGeomRef = geomData;
             }
-
-            if (tilePositions.length > 0) {
-                const tileGeo = new THREE.BufferGeometry();
-                tileGeo.setAttribute('position', new THREE.Float32BufferAttribute(tilePositions, 3));
-                tileGeo.setAttribute('color', new THREE.Float32BufferAttribute(tileColors, 3));
-
-                const tileMat = new THREE.MeshBasicMaterial({
-                    vertexColors: true,
-                    side: THREE.DoubleSide,
-                });
-
-                const tileMesh = new THREE.Mesh(tileGeo, tileMat);
-                tileMesh.name = 'heatmap_mesh';
-                group.add(tileMesh);
-            }
-
-            return group;
-        }
-
-        // ─── PHASE 2: VERTICAL WALL RAINBOW STRIPE TEST ───
-        let verticalWallGroup = null; // separate Three.js group for wall cells
-
-        async function runVerticalWallPhase2() {
-            // Clean up previous Phase 2 group
-            if (verticalWallGroup) {
-                scene.remove(verticalWallGroup);
-                verticalWallGroup.traverse(c => {
-                    if (c.geometry) c.geometry.dispose();
-                    if (c.material) c.material.dispose();
-                });
-                verticalWallGroup = null;
-            }
-
-            if (selectedVerticalFaces.length === 0) return;
-
-            const gridSize = parseFloat(document.getElementById('grid_resolution').value) || 1.0;
-
-            showStatus('Phase 2: collecting vertical face triangles...');
-            await new Promise(r => setTimeout(r, 0));
-
-            // Step 1: Collect all vertical face triangles in world space
-            const vertTris = [];
-            for (const vf of selectedVerticalFaces) {
-                vf.mesh.updateWorldMatrix(true, false);
-                const wm = vf.mesh.matrixWorld;
-                const vGeo = vf.mesh.geometry;
-                const vPos = vGeo.attributes.position.array;
-                const vIdx = vGeo.index ? vGeo.index.array : null;
-
-                // Transform face group normal to world space
-                const nMat = new THREE.Matrix3().getNormalMatrix(wm);
-                const wn = new THREE.Vector3(vf.normal[0], vf.normal[1], vf.normal[2])
-                    .applyMatrix3(nMat).normalize();
-                const faceNormal = [wn.x, wn.y, wn.z];
-
-                for (const f of vf.faceIndices) {
-                    const vi0 = vIdx ? vIdx[f*3]*3 : f*9;
-                    const vi1 = vIdx ? vIdx[f*3+1]*3 : f*9+3;
-                    const vi2 = vIdx ? vIdx[f*3+2]*3 : f*9+6;
-
-                    const a = new THREE.Vector3(vPos[vi0], vPos[vi0+1], vPos[vi0+2]).applyMatrix4(wm);
-                    const b = new THREE.Vector3(vPos[vi1], vPos[vi1+1], vPos[vi1+2]).applyMatrix4(wm);
-                    const c = new THREE.Vector3(vPos[vi2], vPos[vi2+1], vPos[vi2+2]).applyMatrix4(wm);
-
-                    const tri = [
-                        [a.x, a.y, a.z],
-                        [b.x, b.y, b.z],
-                        [c.x, c.y, c.z],
-                    ];
-                    tri.faceNormal = faceNormal;
-                    vertTris.push(tri);
-                }
-            }
-
-            if (vertTris.length === 0) return;
-
-            showStatus(`Phase 2: slicing ${vertTris.length} vertical triangles into Y bands...`);
-            await new Promise(r => setTimeout(r, 0));
-
-            // Step 2: Slice along Y axis at gridSize intervals
-            // Reuse splitTrisAlongPlane with axis=1 for Y
-            let ySliced = vertTris;
-            let minY = Infinity, maxY = -Infinity;
-            for (const tri of vertTris) {
-                for (const v of tri) {
-                    if (v[1] < minY) minY = v[1];
-                    if (v[1] > maxY) maxY = v[1];
-                }
-            }
-
-            const firstY = Math.ceil(minY / gridSize) * gridSize;
-            for (let y = firstY; y < maxY; y += gridSize) {
-                ySliced = splitTrisAlongPlane(ySliced, 1, y);
-            }
-
-            showStatus(`Phase 2: splitting ${ySliced.length} fragments into XZ grid cells...`);
-            await new Promise(r => setTimeout(r, 0));
-
-            // Step 3: Split into XZ grid squares using clipTriToGrid
-            // Then bucket by (col, yBand, row)
-            const wallCells = new Map(); // key: "col,yBand,row" -> { tris: [], yBand: number }
-
-            for (let i = 0; i < ySliced.length; i++) {
-                const subTris = clipTriToGrid(ySliced[i], gridSize);
-                for (const st of subTris) {
-                    const [a, b, c] = st;
-                    const cx = (a[0] + b[0] + c[0]) / 3;
-                    const cy = (a[1] + b[1] + c[1]) / 3;
-                    const cz = (a[2] + b[2] + c[2]) / 3;
-
-                    const col = Math.floor(cx / gridSize);
-                    const yBand = Math.floor(cy / gridSize);
-                    const row = Math.floor(cz / gridSize);
-                    const key = col + ',' + yBand + ',' + row;
-
-                    if (!wallCells.has(key)) {
-                        wallCells.set(key, { tris: [], yBand });
-                    }
-                    wallCells.get(key).tris.push(st);
-                }
-
-                if (i % 500 === 0 && i > 0) {
-                    showStatus(`Phase 2: XZ clipping... ${Math.round(i / ySliced.length * 100)}%`);
-                    await new Promise(r => setTimeout(r, 0));
-                }
-            }
-
-            showStatus(`Phase 2: painting ${wallCells.size} wall cells with rainbow stripes...`);
-            await new Promise(r => setTimeout(r, 0));
-
-            // Step 4: Paint with rainbow test colours based on yBand
-            const positions = [];
-            const colors = [];
-
-            for (const [key, cell] of wallCells) {
-                const hue = (cell.yBand % 12) / 12;
-                // HSL to RGB conversion for hue with S=100%, L=50%
-                const r_col = hslToRgbChannel(hue, 1.0, 0.5, 0); // r
-                const g_col = hslToRgbChannel(hue, 1.0, 0.5, 1); // g
-                const b_col = hslToRgbChannel(hue, 1.0, 0.5, 2); // b
-
-                // Use face group normal for offset (consistent across entire face)
-                const fn = cell.tris[0].faceNormal;
-                const off = 0.02; // 20mm offset along normal
-                const nx = fn ? fn[0] : 0;
-                const ny = fn ? fn[1] : 0;
-                const nz = fn ? fn[2] : 0;
-
-                for (const tri of cell.tris) {
-                    for (const v of tri) {
-                        positions.push(v[0] + nx * off, v[1] + ny * off, v[2] + nz * off);
-                        colors.push(r_col, g_col, b_col);
-                    }
-                }
-            }
-
-            if (positions.length === 0) return;
 
             const geo = new THREE.BufferGeometry();
-            geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-            geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            geo.setAttribute('position', sharedPositionAttr);
+            geo.setIndex(sharedIndexAttr);
+            geo.setAttribute('sunHours', new THREE.BufferAttribute(results.vertexSunHours, 1));
 
-            const mat = new THREE.MeshBasicMaterial({
-                vertexColors: true,
+            const mat = new THREE.ShaderMaterial({
+                uniforms: { opacity: { value: 1.0 } },
+                vertexShader: HEAT_VERTEX_SHADER,
+                fragmentShader: HEAT_FRAGMENT_SHADER,
                 side: THREE.DoubleSide,
+                transparent: false,
             });
 
             const mesh = new THREE.Mesh(geo, mat);
-            mesh.name = 'vertical_wall_phase2';
+            mesh.name = 'heatmap_mesh';
+            mesh.userData.sunHours = results.vertexSunHours; // for GLB baking and the ray probe
+            group.add(mesh);
 
-            verticalWallGroup = new THREE.Group();
-            verticalWallGroup.name = 'vertical_wall_rainbow';
-            verticalWallGroup.add(mesh);
-            scene.add(verticalWallGroup);
-
-            showStatus(`Phase 2 complete — ${wallCells.size} wall cells painted`);
-            console.log(`Phase 2: ${wallCells.size} wall cells, ${vertTris.length} input tris, ${ySliced.length} after Y-slice`);
-        }
-
-        // HSL channel helper: returns R, G, or B (0-1) for given HSL
-        function hslToRgbChannel(h, s, l, channel) {
-            const c = new THREE.Color();
-            c.setHSL(h, s, l);
-            return channel === 0 ? c.r : channel === 1 ? c.g : c.b;
+            return group;
         }
 
         // ─── RUN ANALYSIS (multi-season) ───
         async function runAnalysis() {
             const btn = document.getElementById('run-btn');
-            if (!ifcLoaded || selectedGroundMeshes.length === 0) {
+            if (!ifcLoaded || (selectedGroundMeshes.length === 0 && selectedVerticalFaces.length === 0)) {
                 alert('Please complete previous steps first.');
                 return;
             }
@@ -3717,15 +3223,15 @@
                 const lng = parseFloat(document.getElementById('longitude').value);
                 const timeStep = parseFloat(document.getElementById('time_step').value);
 
-                // Prepare grid cells ONCE (merge + slice + top-surface extraction)
-                const cellData = await prepareGridCells();
+                // Prepare analysis geometry ONCE (collect + subdivide + dedup)
+                const geom = await prepareAnalysisGeometry();
 
                 for (let si = 0; si < seasons.length; si++) {
                     const season = seasons[si];
                     const dateStr = SEASON_DATES[season];
                     showStatus(`Ray casting ${SEASON_LABELS[season]} (${si + 1}/${seasons.length})...`);
 
-                    const results = await runTerrainAnalysis(lat, lng, timeStep, dateStr, cellData);
+                    const results = await runTerrainAnalysis(lat, lng, timeStep, dateStr, geom);
                     results.season = season;
                     results.seasonLabel = SEASON_LABELS[season];
                     seasonResults[season] = results;
@@ -3761,8 +3267,8 @@
                 // Show colour legend
                 document.getElementById('colour-legend').classList.add('visible');
 
-                const totalCells = seasonResults[visibleSeason].cellData.length;
-                showStatus(`Analysis complete \u2014 ${seasons.length} season(s), ${totalCells} grid cells`);
+                const totalCells = seasonResults[visibleSeason].geom.vertexCount;
+                showStatus(`Analysis complete \u2014 ${seasons.length} season(s), ${totalCells} analysis points`);
                 setTimeout(hideStatus, 5000);
 
                 // Build summary for step completion
@@ -3782,8 +3288,6 @@
                     }
                 }
 
-                // Phase 2: vertical wall rainbow stripe test
-                await runVerticalWallPhase2();
 
                 updateBugReportLink();
 
@@ -3810,248 +3314,8 @@
                 const bold = k === seasonKey ? 'color:#e0e0e0; font-weight:600;' : '';
                 html += `<div style="${bold}">${SEASON_LABELS[k]}: analysis complete</div>`;
             }
-            html += `<div style="margin-top:4px;">Total area: ${summary.area_total} m\u00b2 &nbsp;|&nbsp; Grid cells: ${summary.cells_total}</div>`;
-            if (cachedDroppedCells && cachedDroppedCells.length > 0) {
-                html += `<div style="margin-top:4px; color:#ff7ad4;">Missing tiles: ${cachedDroppedCells.length} (use Debug overlay)</div>`;
-            }
+            html += `<div style="margin-top:4px;">Total area: ${summary.area_total} m\u00b2 &nbsp;|&nbsp; Analysis points: ${summary.cells_total}</div>`;
             document.getElementById('results-detail').innerHTML = html;
-        }
-
-        // \u2500\u2500\u2500 DEBUG: MISSING-TILE OVERLAY \u2500\u2500\u2500
-        // Visualises grid squares the roof covered but that produced no tile.
-        // Magenta = all triangles filtered as internal/dead-zone structure;
-        // Cyan = cell's layers/clusters were degenerate (zero-area slivers).
-        function toggleDebugTiles() {
-            const btn = document.getElementById('debug-tiles-btn');
-
-            // Toggle off
-            if (debugDroppedGroup) {
-                scene.remove(debugDroppedGroup);
-                debugDroppedGroup.traverse(c => {
-                    if (c.geometry) c.geometry.dispose();
-                    if (c.material) c.material.dispose();
-                });
-                debugDroppedGroup = null;
-                if (btn) btn.textContent = 'Debug: show missing tiles';
-                hideStatus();
-                return;
-            }
-
-            if (!cachedDroppedCells || cachedDroppedCells.length === 0) {
-                showStatus('Debug: no missing tiles recorded \u2014 run an analysis first');
-                setTimeout(hideStatus, 4000);
-                return;
-            }
-
-            const gridSize = cachedGridSize || 1.0;
-            const half = gridSize * 0.45;
-            const REASON_COLORS = {
-                'all-internal/dead-zone': [1.0, 0.0, 1.0],   // magenta
-                'degenerate-or-filtered': [0.0, 1.0, 1.0],   // cyan
-            };
-
-            const positions = [];
-            const colors = [];
-            const reasonCounts = {};
-
-            for (const d of cachedDroppedCells) {
-                reasonCounts[d.reason] = (reasonCounts[d.reason] || 0) + 1;
-                const col = REASON_COLORS[d.reason] || [1.0, 1.0, 1.0];
-                // Flat horizontal patch centred on the missing cell, lifted clear
-                const y = d.y + 0.05;
-                const x0 = d.x - half, x1 = d.x + half;
-                const z0 = d.z - half, z1 = d.z + half;
-                positions.push(
-                    x0, y, z0,  x1, y, z0,  x1, y, z1,
-                    x0, y, z0,  x1, y, z1,  x0, y, z1
-                );
-                for (let v = 0; v < 6; v++) colors.push(col[0], col[1], col[2]);
-            }
-
-            const geo = new THREE.BufferGeometry();
-            geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-            geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-            const mat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.name = 'debug_missing_tiles';
-
-            debugDroppedGroup = new THREE.Group();
-            debugDroppedGroup.name = 'debug_missing_tiles_group';
-            debugDroppedGroup.add(mesh);
-            scene.add(debugDroppedGroup);
-
-            const summary = Object.entries(reasonCounts)
-                .map(([r, n]) => `${n} ${r}`).join(', ');
-            console.log('[debug] missing tiles by reason:', reasonCounts);
-            console.table(cachedDroppedCells);
-            showStatus(`Debug: ${cachedDroppedCells.length} missing tiles \u2014 ${summary}. Magenta=internal/dead-zone, Cyan=degenerate.`);
-            if (btn) btn.textContent = 'Debug: hide missing tiles';
-        }
-
-        // \u2500\u2500\u2500 DEBUG: DARK-TILE CLASSIFIER \u2500\u2500\u2500
-        // Dark (~0h) cells aren't holes \u2014 they computed near-zero sun hours.
-        // For each, find the nearest occluder under the HIGHEST sun of the day
-        // and classify by distance AND the occluder's orientation:
-        //   Red    = near occluder              (self-shadow on adjacent geometry)
-        //   Purple = far but PARALLEL to cell    (duplicate/overlapping sheet \u2014 a bug)
-        //   Orange = far, differently oriented   (likely a genuine shadow)
-        //   White  = no occluder                 (0h with clear highest sun \u2014 odd)
-        function toggleDebugDarkTiles() {
-            const btn = document.getElementById('debug-dark-btn');
-
-            if (debugDarkGroup) {
-                scene.remove(debugDarkGroup);
-                debugDarkGroup.traverse(c => {
-                    if (c.geometry) c.geometry.dispose();
-                    if (c.material) c.material.dispose();
-                });
-                debugDarkGroup = null;
-                if (btn) btn.textContent = 'Debug: classify dark tiles';
-                hideStatus();
-                return;
-            }
-
-            const results = seasonResults[visibleSeason];
-            if (!results || !results.cellData || !shadowBVH) {
-                showStatus('Debug: run an analysis first');
-                setTimeout(hideStatus, 4000);
-                return;
-            }
-
-            const cellData = results.cellData;
-            const hoursArr = results.cellSunHours;
-            const sunPositions = results.sunPositions;
-            const gridSize = cachedGridSize || 1.0;
-            const NEAR = gridSize * 1.5;   // occluder this close \u21d2 self-shadow
-            const DARK_HOURS = 1.0;        // "dark-indigo" bottom band of the scale
-
-            // Highest sun of the day \u2014 if even this is blocked, the cell can't
-            // be genuinely open.
-            let bestAlt = -Infinity, bestSun = null;
-            for (const sp of sunPositions) {
-                if (sp.altitude > bestAlt) { bestAlt = sp.altitude; bestSun = sp; }
-            }
-            const sd = sunDirection(bestSun.azimuth, bestSun.altitude);
-
-            const positions = [];
-            const colors = [];
-            const counts = { near: 0, sheet: 0, far: 0, open: 0 };
-            const COLORS = {
-                near:  [1.0, 0.0, 0.0],   // red    — occluder within NEAR (self-shadow)
-                sheet: [0.6, 0.0, 1.0],   // purple — far but parallel (duplicate/overlap sheet)
-                far:   [1.0, 0.55, 0.0],  // orange — far, differently oriented (likely real)
-                open:  [1.0, 1.0, 1.0],   // white  — no occluder under highest sun
-            };
-            const sample = [];
-
-            for (let i = 0; i < cellData.length; i++) {
-                if (hoursArr[i] >= DARK_HOURS) continue;
-                const cd = cellData[i];
-                const ox = cd.centroid.x + cd.normal.x * 0.01;
-                const oy = cd.centroid.y + cd.normal.y * 0.01;
-                const oz = cd.centroid.z + cd.normal.z * 0.01;
-                const hit = shadowBVH.nearestHit(ox, oy, oz, sd.x, sd.y, sd.z);
-                const dist = hit.t;
-
-                let key;
-                if (!isFinite(dist)) {
-                    key = 'open';
-                } else if (dist < NEAR) {
-                    key = 'near';
-                } else {
-                    // Far occluder: a sheet PARALLEL to this cell's own surface
-                    // implies a duplicate/overlapping layer shadowing the cell
-                    // (a bug); a differently-oriented one is a genuine shadow.
-                    const hl = Math.hypot(hit.nx, hit.ny, hit.nz) || 1;
-                    const pdot = Math.abs((hit.nx * cd.normal.x + hit.ny * cd.normal.y + hit.nz * cd.normal.z) / hl);
-                    key = (pdot > 0.9) ? 'sheet' : 'far';
-                }
-                counts[key]++;
-                if (sample.length < 40) {
-                    sample.push({ hours: hoursArr[i], nearestDist: isFinite(dist) ? +dist.toFixed(3) : 'none', class: key });
-                }
-
-                const col = COLORS[key];
-                // Paint the cell's own triangles, lifted above the heatmap
-                for (const tri of cd.tris) {
-                    for (const v of tri) {
-                        positions.push(v[0] + cd.normal.x * 0.03,
-                                       v[1] + cd.normal.y * 0.03,
-                                       v[2] + cd.normal.z * 0.03);
-                        colors.push(col[0], col[1], col[2]);
-                    }
-                }
-            }
-
-            const totalDark = counts.near + counts.sheet + counts.far + counts.open;
-            if (totalDark === 0) {
-                showStatus('Debug: no dark (<1h) cells found');
-                setTimeout(hideStatus, 4000);
-                return;
-            }
-
-            const geo = new THREE.BufferGeometry();
-            geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-            geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-            const mat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.name = 'debug_dark_tiles';
-
-            debugDarkGroup = new THREE.Group();
-            debugDarkGroup.name = 'debug_dark_tiles_group';
-            debugDarkGroup.add(mesh);
-            scene.add(debugDarkGroup);
-
-            console.log(`[debug] dark cells (<${DARK_HOURS}h) under highest sun (alt ${bestAlt.toFixed(1)}\u00b0):`, counts);
-            console.table(sample);
-            showStatus(`Debug: ${totalDark} dark cells \u2014 red ${counts.near} self-shadow, purple ${counts.sheet} parallel-sheet (overlap), orange ${counts.far} real shadow, white ${counts.open} open.`);
-            if (btn) btn.textContent = 'Debug: hide dark tiles';
-        }
-
-        // \u2500\u2500\u2500 DEBUG: RECOVERED INVERTED FACES \u2500\u2500\u2500
-        // Downward-wound (inverted-normal) roof faces that the old winding-based
-        // upward filter dropped as holes, now recovered by the winding-
-        // independent filter. Rendered green where they sit on the roof \u2014 these
-        // are the patches that used to be missing.
-        function toggleDebugDownwardFaces() {
-            const btn = document.getElementById('debug-down-btn');
-
-            if (debugDownGroup) {
-                scene.remove(debugDownGroup);
-                debugDownGroup.traverse(c => {
-                    if (c.geometry) c.geometry.dispose();
-                    if (c.material) c.material.dispose();
-                });
-                debugDownGroup = null;
-                if (btn) btn.textContent = 'Debug: show inverted faces';
-                hideStatus();
-                return;
-            }
-
-            if (!cachedDownwardTris || cachedDownwardTris.length === 0) {
-                showStatus('Debug: no inverted (downward-wound) faces found');
-                setTimeout(hideStatus, 4000);
-                return;
-            }
-
-            const positions = [];
-            for (const d of cachedDownwardTris) {
-                for (const v of d.tri) positions.push(v[0], v[1], v[2]);
-            }
-            const geo = new THREE.BufferGeometry();
-            geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-            const mat = new THREE.MeshBasicMaterial({ color: 0x00ff00, side: THREE.DoubleSide });
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.name = 'debug_downward_faces';
-
-            debugDownGroup = new THREE.Group();
-            debugDownGroup.name = 'debug_downward_faces_group';
-            debugDownGroup.add(mesh);
-            scene.add(debugDownGroup);
-
-            console.log(`[debug] recovered inverted (downward-wound) faces: ${cachedDownwardTris.length}`);
-            showStatus(`Debug: ${cachedDownwardTris.length} inverted (downward-wound) roof faces recovered (green). These were the holes.`);
-            if (btn) btn.textContent = 'Debug: hide inverted faces';
         }
 
         // ─── EXPORT GLB (coloured ground + grey buildings) ───
@@ -4066,17 +3330,30 @@
             const activeHeatmap = seasonHeatmaps[visibleSeason];
             if (activeHeatmap) {
                 const hmClone = activeHeatmap.clone();
-                // Convert vertex-color MeshBasicMaterial to MeshStandardMaterial for GLB compat
+                // glTF has no custom shaders: bake the shader ramp to vertex
+                // RGB colours on a cloned geometry (lerpColour per vertex).
                 hmClone.traverse(c => {
-                    if (c.isMesh && c.material) {
-                        const newMat = new THREE.MeshStandardMaterial({
-                            vertexColors: c.material.vertexColors,
+                    if (c.isMesh && c.userData && c.userData.sunHours) {
+                        const srcGeo = c.geometry;
+                        const baked = new THREE.BufferGeometry();
+                        baked.setAttribute('position', srcGeo.getAttribute('position').clone());
+                        if (srcGeo.index) baked.setIndex(srcGeo.index.clone());
+                        const hours = c.userData.sunHours;
+                        const cols = new Float32Array(hours.length * 3);
+                        for (let i = 0; i < hours.length; i++) {
+                            const rgb = lerpColour(hours[i]);
+                            cols[i*3] = rgb[0];
+                            cols[i*3+1] = rgb[1];
+                            cols[i*3+2] = rgb[2];
+                        }
+                        baked.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+                        c.geometry = baked;
+                        c.material = new THREE.MeshStandardMaterial({
+                            vertexColors: true,
                             side: THREE.DoubleSide,
                             roughness: 1.0,
                             metalness: 0.0,
                         });
-                        c.material.dispose();
-                        c.material = newMat;
                     }
                 });
                 exportScene.add(hmClone);
@@ -4753,6 +4030,9 @@
                         c.material = c.material.clone();
                         c.material.opacity = 0.25;
                         c.material.transparent = true;
+                        if (c.material.uniforms && c.material.uniforms.opacity) {
+                            c.material.uniforms.opacity.value = 0.25;
+                        }
                         c.material._grayedOut = true;
                     }
                 });
@@ -4767,6 +4047,9 @@
                     if (c.material && c.material._grayedOut) {
                         c.material.opacity = 1.0;
                         c.material.transparent = false;
+                        if (c.material.uniforms && c.material.uniforms.opacity) {
+                            c.material.uniforms.opacity.value = 1.0;
+                        }
                         c.material._grayedOut = false;
                     }
                 });
@@ -4865,25 +4148,38 @@
 
             const hitPoint = hits[0].point;
 
-            // Find the closest cellData centroid to the hit point
+            // Find the closest analysed vertex to the hit point. With an
+            // indexed geometry the hit face gives the three vertex indices
+            // directly; pick the nearest of the three.
             const results = seasonResults[visibleSeason];
+            const geom = results.geom;
+            const pos = geom.positions;
+            const nor = geom.normals;
             let bestIdx = -1;
             let bestDist = Infinity;
-            for (let i = 0; i < results.cellData.length; i++) {
-                const cd = results.cellData[i];
-                const dx = cd.centroid.x - hitPoint.x;
-                const dy = cd.centroid.y - hitPoint.y;
-                const dz = cd.centroid.z - hitPoint.z;
-                const d2 = dx * dx + dy * dy + dz * dz;
-                if (d2 < bestDist) {
-                    bestDist = d2;
-                    bestIdx = i;
+            const face = hits[0].face;
+            const candidates = face ? [face.a, face.b, face.c] : null;
+            if (candidates) {
+                for (const vi of candidates) {
+                    const dx = pos[vi*3] - hitPoint.x;
+                    const dy = pos[vi*3+1] - hitPoint.y;
+                    const dz = pos[vi*3+2] - hitPoint.z;
+                    const d2 = dx*dx + dy*dy + dz*dz;
+                    if (d2 < bestDist) { bestDist = d2; bestIdx = vi; }
+                }
+            } else {
+                for (let i = 0; i < geom.vertexCount; i++) {
+                    const dx = pos[i*3] - hitPoint.x;
+                    const dy = pos[i*3+1] - hitPoint.y;
+                    const dz = pos[i*3+2] - hitPoint.z;
+                    const d2 = dx*dx + dy*dy + dz*dz;
+                    if (d2 < bestDist) { bestDist = d2; bestIdx = i; }
                 }
             }
             if (bestIdx === -1) return;
 
-            const cell = results.cellData[bestIdx];
-            const sunHours = results.cellSunHours[bestIdx];
+            const vnx = nor[bestIdx*3], vny = nor[bestIdx*3+1], vnz = nor[bestIdx*3+2];
+            const sunHours = results.vertexSunHours[bestIdx];
             const sunPositions = results.sunPositions;
 
             // Clear previous probe
@@ -4894,9 +4190,9 @@
             rayProbeGroup.name = 'ray_probe';
 
             const origin = new THREE.Vector3(
-                cell.centroid.x + cell.normal.x * 0.01,
-                cell.centroid.y + cell.normal.y * 0.01,
-                cell.centroid.z + cell.normal.z * 0.01
+                pos[bestIdx*3] + vnx * 0.01,
+                pos[bestIdx*3+1] + vny * 0.01,
+                pos[bestIdx*3+2] + vnz * 0.01
             );
 
             // Add a small sphere marker at the probe point
@@ -4915,7 +4211,9 @@
 
                 const ox = origin.x, oy = origin.y, oz = origin.z;
                 const blocked = shadowBVH
-                    ? shadowBVH.intersectsAny(ox, oy, oz, dir.x, dir.y, dir.z)
+                    ? (selfShadowExclusion
+                        ? shadowBVH.intersectsRealShadow(ox, oy, oz, dir.x, dir.y, dir.z, vnx, vny, vnz)
+                        : shadowBVH.intersectsAny(ox, oy, oz, dir.x, dir.y, dir.z))
                     : false;
 
                 // Draw ray line
