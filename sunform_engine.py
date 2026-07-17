@@ -128,82 +128,139 @@ def ray_hits_any_triangle(
     return False
 
 
-# ── Simple Grid Analysis ─────────────────────────────────────────────────
+# ── Edge-split subdivision + per-vertex analysis ─────────────────────────
 
-def compute_sun_hours_flat_grid(
-    ground_y: float,
-    grid_min_x: float, grid_min_z: float,
-    grid_max_x: float, grid_max_z: float,
-    grid_size: float,
+def subdivide_to_max_edge(triangles, max_edge: float = 0.5):
+    """Recursively bisect the longest edge of any triangle whose longest edge
+    exceeds ``max_edge``. Returns a new list of triangles with no edge longer
+    than the threshold. Mirrors the JS subdivideToMaxEdge.
+    """
+    out = []
+    stack = list(triangles)
+    max_e2 = max_edge * max_edge
+    while stack:
+        tri = stack.pop()
+        a, b, c = tri[0], tri[1], tri[2]
+        e2 = []
+        for (p, q) in ((a, b), (b, c), (c, a)):
+            dx, dy, dz = q[0]-p[0], q[1]-p[1], q[2]-p[2]
+            e2.append(dx*dx + dy*dy + dz*dz)
+        longest = max(range(3), key=lambda i: e2[i])
+        if e2[longest] <= max_e2:
+            out.append((a, b, c))
+            continue
+        # Bisect the longest edge; split into two triangles
+        if longest == 0:
+            m = tuple((a[i]+b[i])/2 for i in range(3))
+            stack.append((a, m, c))
+            stack.append((m, b, c))
+        elif longest == 1:
+            m = tuple((b[i]+c[i])/2 for i in range(3))
+            stack.append((a, b, m))
+            stack.append((a, m, c))
+        else:
+            m = tuple((c[i]+a[i])/2 for i in range(3))
+            stack.append((a, b, m))
+            stack.append((m, b, c))
+    return out
+
+
+def build_unique_vertices(triangles, quant: float = 1e-4):
+    """Deduplicate shared vertices. Returns (vertices, tri_indices) where
+    vertices is a list of Vec3 and tri_indices is a list of (i0, i1, i2).
+    Adjacent triangles share edge vertices (midpoints quantize identically).
+    """
+    verts = []
+    index_of = {}
+    tri_indices = []
+    inv = 1.0 / quant
+    for tri in triangles:
+        idxs = []
+        for v in tri[:3]:
+            key = (round(v[0]*inv), round(v[1]*inv), round(v[2]*inv))
+            i = index_of.get(key)
+            if i is None:
+                i = len(verts)
+                index_of[key] = i
+                verts.append((v[0], v[1], v[2]))
+            idxs.append(i)
+        tri_indices.append(tuple(idxs))
+    return verts, tri_indices
+
+
+def _tri_normal_area(a, b, c):
+    e1 = (b[0]-a[0], b[1]-a[1], b[2]-a[2])
+    e2 = (c[0]-a[0], c[1]-a[1], c[2]-a[2])
+    n = (e1[1]*e2[2]-e1[2]*e2[1], e1[2]*e2[0]-e1[0]*e2[2], e1[0]*e2[1]-e1[1]*e2[0])
+    length = math.sqrt(n[0]*n[0] + n[1]*n[1] + n[2]*n[2])
+    return n, length * 0.5
+
+
+def compute_vertex_normals(verts, tri_indices, upward: bool = True):
+    """Area-weighted per-vertex normals. With upward=True each face normal is
+    sign-flipped to ny >= 0 first (roof/ground convention)."""
+    acc = [[0.0, 0.0, 0.0] for _ in verts]
+    for (i0, i1, i2) in tri_indices:
+        n, area = _tri_normal_area(verts[i0], verts[i1], verts[i2])
+        if area == 0:
+            continue
+        length = area * 2.0
+        nx, ny, nz = n[0]/length, n[1]/length, n[2]/length
+        if upward and ny < 0:
+            nx, ny, nz = -nx, -ny, -nz
+        for i in (i0, i1, i2):
+            acc[i][0] += nx * area
+            acc[i][1] += ny * area
+            acc[i][2] += nz * area
+    out = []
+    for v in acc:
+        length = math.sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2])
+        if length > 0:
+            out.append((v[0]/length, v[1]/length, v[2]/length))
+        else:
+            out.append((0.0, 1.0, 0.0))
+    return out
+
+
+def compute_vertex_voronoi_areas(verts, tri_indices):
+    """One-third of each adjacent triangle's area per vertex."""
+    areas = [0.0] * len(verts)
+    for (i0, i1, i2) in tri_indices:
+        _, area = _tri_normal_area(verts[i0], verts[i1], verts[i2])
+        third = area / 3.0
+        areas[i0] += third
+        areas[i1] += third
+        areas[i2] += third
+    return areas
+
+
+def compute_sun_hours_per_vertex(
+    verts, normals,
     shadow_triangles: List[Triangle],
     sun_positions: List[dict],
     time_step: float,
-    min_t: float = 0.1,
-) -> dict:
-    """
-    Simplified flat-grid analysis for testing.
-    Returns dict mapping (col, row) -> sun_hours.
-    """
-    results = {}
-    col_start = int(math.floor(grid_min_x / grid_size))
-    col_end = int(math.ceil(grid_max_x / grid_size))
-    row_start = int(math.floor(grid_min_z / grid_size))
-    row_end = int(math.ceil(grid_max_z / grid_size))
-
-    sun_dirs = [sun_direction(sp['azimuth'], sp['altitude']) for sp in sun_positions]
-
-    for col in range(col_start, col_end):
-        for row in range(row_start, row_end):
-            cx = (col + 0.5) * grid_size
-            cz = (row + 0.5) * grid_size
-            origin = (cx, ground_y + 0.01, cz)  # 10mm above ground
-            hours = 0.0
-            for sd in sun_dirs:
-                if not ray_hits_any_triangle(origin, sd, shadow_triangles, min_t=min_t):
-                    hours += time_step
-            results[(col, row)] = hours
-
-    return results
-
-
-def compute_sun_hours_array_style(
-    cells: List[Vec3],
-    shadow_triangles: List[Triangle],
-    sun_positions: List[dict],
-    time_step: float,
+    min_t: float = 1e-4,
+    offset: float = 0.01,
     batch_size: int = 2000,
-    min_t: float = 0.1,
 ) -> List[float]:
+    """Per-vertex sun hours. Mirrors the JS loop structure: shared array
+    initialised once to zeros; outer loop over sun positions; inner loop over
+    vertices in batches; accumulation via hours[j] += time_step. Each vertex
+    origin is offset along its own normal.
     """
-    Mirrors the exact JS loop structure in runTerrainAnalysis():
-    - Shared array initialized once to zeros
-    - Outer loop: sun positions
-    - Inner loop: cells in batches
-    - Accumulation via array[j] += time_step
-
-    This catches bugs the dict-style function cannot: accidental resets
-    inside the sun loop, batch-boundary resets, overwrite vs accumulate.
-    """
-    n = len(cells)
-    cell_sun_hours = [0.0] * n  # mirrors Float32Array init
-
+    n = len(verts)
+    hours = [0.0] * n
     sun_dirs = [sun_direction(sp['azimuth'], sp['altitude']) for sp in sun_positions]
-
-    for sun_idx in range(len(sun_dirs)):
-        dx, dy, dz = sun_dirs[sun_idx]
-
+    for d in sun_dirs:
         for i in range(0, n, batch_size):
             end = min(i + batch_size, n)
-
             for j in range(i, end):
-                ox, oy, oz = cells[j]
-                if not ray_hits_any_triangle(
-                    (ox, oy + 0.01, oz), (dx, dy, dz), shadow_triangles,
-                    min_t=min_t,
-                ):
-                    cell_sun_hours[j] += time_step
-
-    return cell_sun_hours
+                vx, vy, vz = verts[j]
+                nx, ny, nz = normals[j]
+                origin = (vx + nx*offset, vy + ny*offset, vz + nz*offset)
+                if not ray_hits_any_triangle(origin, d, shadow_triangles, min_t=min_t):
+                    hours[j] += time_step
+    return hours
 
 
 # ── Self-shadow exclusion (ignore a surface's own near-coplanar geometry) ──

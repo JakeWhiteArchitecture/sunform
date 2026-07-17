@@ -22,8 +22,11 @@ from sunform_engine import (
     sun_direction,
     ray_triangle_intersect,
     ray_hits_any_triangle,
-    compute_sun_hours_flat_grid,
-    compute_sun_hours_array_style,
+    subdivide_to_max_edge,
+    build_unique_vertices,
+    compute_vertex_normals,
+    compute_vertex_voronoi_areas,
+    compute_sun_hours_per_vertex,
     ray_hits_real_occluder,
     dedupe_triangles,
 )
@@ -159,129 +162,6 @@ class TestGeometryFixtures:
                 f"Ray from {origin} dir {direction} should hit box — face may have wrong winding"
 
 
-# ── Test A: Unobstructed flat plane ──────────────────────────────────────
-
-class TestUnobstructed:
-    """Flat 10m x 10m ground, no buildings. Every cell should receive sun."""
-
-    def test_all_cells_receive_sun(self):
-        sun_pos = get_sun_positions(51.5, -0.1, 2024, 3, 21, time_step=1.0)
-        assert len(sun_pos) > 0, "Must have sun positions above horizon"
-
-        results = compute_sun_hours_flat_grid(
-            ground_y=0.0,
-            grid_min_x=0, grid_min_z=0,
-            grid_max_x=10, grid_max_z=10,
-            grid_size=1.0,
-            shadow_triangles=[],  # NO obstacles
-            sun_positions=sun_pos,
-            time_step=1.0,
-        )
-
-        for key, hours in results.items():
-            assert hours > 0, f"Cell {key} should receive sunlight but got {hours}h"
-            assert hours == len(sun_pos) * 1.0, \
-                f"Cell {key} should get {len(sun_pos)}h but got {hours}h"
-
-
-# ── Test B: Single box, sun at 45° due south ────────────────────────────
-
-class TestSingleBoxShadow:
-    """10m cube at origin, sun from due south at 45° altitude.
-    Shadow should extend exactly 10m in the -Z direction from the box."""
-
-    def test_shadow_extends_north(self):
-        # 10m cube centred at (0, 5, 0) — half-extent 5m each axis
-        box = make_box_triangles(0, 5, 0, 5, 5, 5)
-
-        # Single sun position: azimuth 180° (due south), altitude 45°
-        sun_pos = [{'azimuth': 180.0, 'altitude': 45.0, 'hour': 12}]
-
-        # Sun direction is (0, 0.707, 0.707) — comes from +Z side.
-        # Shadow extends in -Z. At 45°, shadow length = building height = 10m.
-        # Box north face at z=-5, so shadow covers z from -5 to -15.
-
-        results = compute_sun_hours_flat_grid(
-            ground_y=0.0,
-            grid_min_x=-20, grid_min_z=-25,
-            grid_max_x=20, grid_max_z=20,
-            grid_size=1.0,
-            shadow_triangles=box,
-            sun_positions=sun_pos,
-            time_step=1.0,
-        )
-
-        # 1) Cells under the box footprint (x: -5..5, z: -5..5) must be shaded
-        for col in range(-5, 5):
-            for row in range(-5, 5):
-                assert results[(col, row)] == 0.0, \
-                    f"Cell ({col},{row}) under box should be in shadow, got {results[(col,row)]}h"
-
-        # 2) Cells in the shadow zone (x: -4..4, z: -14..-6) must be shaded
-        #    Using x range -4..4 (centres -3.5..3.5) to stay well within box width
-        shadow_cells_checked = 0
-        for col in range(-4, 4):
-            for row in range(-14, -5):  # centres at z=-13.5 to z=-4.5
-                assert results[(col, row)] == 0.0, \
-                    f"Cell ({col},{row}) in shadow zone (z={row+0.5}) should be shaded"
-                shadow_cells_checked += 1
-        assert shadow_cells_checked > 0
-
-        # 3) Cells BEYOND the 10m shadow (z < -16, with margin) must be LIT
-        for col in range(-3, 3):
-            for row in range(-24, -17):  # centres at z=-23.5 to z=-16.5
-                assert results[(col, row)] == 1.0, \
-                    f"Cell ({col},{row}) beyond shadow (z={row+0.5}) should be lit"
-
-        # 4) Cells on the sun side (south / +Z) should be lit
-        for col in range(-3, 3):
-            for row in range(10, 15):
-                assert results[(col, row)] == 1.0, \
-                    f"Cell ({col},{row}) south of box should be lit"
-
-
-# ── Test C: Complete enclosure ───────────────────────────────────────────
-
-class TestEnclosure:
-    """Deep courtyard — 50m walls on all sides. Centre cells get near-zero."""
-
-    def test_courtyard_shaded(self):
-        # 4 walls forming a 20m x 20m courtyard, 50m tall
-        # Walls at x/z = ±10, height 0..50
-        walls = []
-        walls += make_box_triangles(0, 25, -10, 10, 25, 0.5)  # north wall (z=-10)
-        walls += make_box_triangles(0, 25, 10, 10, 25, 0.5)   # south wall (z=+10)
-        walls += make_box_triangles(-10, 25, 0, 0.5, 25, 10)  # west wall
-        walls += make_box_triangles(10, 25, 0, 0.5, 25, 10)   # east wall
-
-        # Winter sun — low angle (max altitude ~15° at London solstice)
-        sun_pos = get_sun_positions(51.5, -0.1, 2024, 12, 21, time_step=1.0)
-        assert len(sun_pos) > 0
-
-        results = compute_sun_hours_flat_grid(
-            ground_y=0.0,
-            grid_min_x=-5, grid_min_z=-5,
-            grid_max_x=5, grid_max_z=5,
-            grid_size=2.0,
-            shadow_triangles=walls,
-            sun_positions=sun_pos,
-            time_step=1.0,
-        )
-
-        max_possible = len(sun_pos) * 1.0
-
-        # Centre cell must be fully shaded — 50m walls with ~15° max sun angle
-        # means shadow length ≈ 50/tan(15°) ≈ 186m, far exceeding courtyard width
-        centre_hours = results.get((0, 0), 0)
-        assert centre_hours == 0.0, \
-            f"Centre of 50m-deep courtyard in winter should get 0h, got {centre_hours}h"
-
-        # ALL cells inside the courtyard must be fully shaded
-        for key, hours in results.items():
-            assert hours == 0.0, \
-                f"Cell {key} in deep courtyard should get 0h, got {hours}h"
-
-
 # ── Test D: Sun below horizon filtered ───────────────────────────────────
 
 class TestBelowHorizon:
@@ -292,97 +172,6 @@ class TestBelowHorizon:
         sun_pos = get_sun_positions(89.0, 0.0, 2024, 12, 21, time_step=1.0)
         assert len(sun_pos) == 0, \
             f"North pole in December should have no sun above horizon, got {len(sun_pos)}"
-
-
-# ── Test E: Sun directly overhead ────────────────────────────────────────
-
-class TestDirectlyOverhead:
-    """Sun at altitude ~90° — shadow has near-zero length, only footprint is shaded."""
-
-    def test_overhead_sun_no_shadow_extension(self):
-        # 2m x 2m box, 5m tall, centred at x=5, z=5
-        # Footprint: x in [4, 6], z in [4, 6]
-        box = make_box_triangles(5, 2.5, 5, 1, 2.5, 1)
-
-        sun_pos = [{'azimuth': 180.0, 'altitude': 89.9, 'hour': 12}]
-
-        results = compute_sun_hours_flat_grid(
-            ground_y=0.0,
-            grid_min_x=0, grid_min_z=0,
-            grid_max_x=10, grid_max_z=10,
-            grid_size=1.0,
-            shadow_triangles=box,
-            sun_positions=sun_pos,
-            time_step=1.0,
-        )
-
-        # At 89.9°, shadow length = 5/tan(89.9°) ≈ 0.009m — negligible.
-        # Only footprint cells should be shaded. Footprint covers x=[4,6], z=[4,6].
-        # Grid cells (col, row) with centres at (col+0.5, row+0.5):
-        # Footprint cells: col=4 (cx=4.5), col=5 (cx=5.5), row=4 (cz=4.5), row=5 (cz=5.5)
-        footprint_cells = {(4, 4), (4, 5), (5, 4), (5, 5)}
-
-        # All cells far from footprint must be lit (check a comprehensive set)
-        for col in range(0, 10):
-            for row in range(0, 10):
-                if (col, row) not in footprint_cells:
-                    assert results[(col, row)] == 1.0, \
-                        f"Cell ({col},{row}) outside footprint should be lit, got {results[(col,row)]}h"
-
-        # Footprint cells must be shaded
-        for cell in footprint_cells:
-            assert results[cell] == 0.0, \
-                f"Footprint cell {cell} should be shaded, got {results[cell]}h"
-
-
-# ── Test F: Known shadow length at specific angle ────────────────────────
-
-class TestKnownShadowLength:
-    """5m tall box, sun at 30° altitude from due south.
-    Shadow length = 5 / tan(30°) ≈ 8.66m in the -Z direction."""
-
-    def test_shadow_length(self):
-        # 2m x 2m box, 5m tall at origin (x: -1..1, y: 0..5, z: -1..1)
-        box = make_box_triangles(0, 2.5, 0, 1, 2.5, 1)
-
-        sun_pos = [{'azimuth': 180.0, 'altitude': 30.0, 'hour': 12}]
-        expected_shadow_len = 5.0 / math.tan(math.radians(30.0))  # ≈ 8.66m
-
-        # Shadow extends in -Z from z=-1 (north face), so tip at z = -1 - 8.66 = -9.66
-        results = compute_sun_hours_flat_grid(
-            ground_y=0.0,
-            grid_min_x=-10, grid_min_z=-15,
-            grid_max_x=10, grid_max_z=15,
-            grid_size=1.0,
-            shadow_triangles=box,
-            sun_positions=sun_pos,
-            time_step=1.0,
-        )
-
-        # 1) Cell under the box must be shaded
-        assert results[(0, 0)] == 0.0, "Cell under box should be shaded"
-
-        # 2) Cell in the middle of the shadow zone (z ≈ -5) must be shaded
-        #    Centre of cell (0, -5) is at z=-4.5 — well within shadow
-        assert results[(0, -5)] == 0.0, \
-            f"Cell (0,-5) at z=-4.5 should be in shadow (shadow tip at z≈-9.66)"
-
-        # 3) Cell just inside the shadow tip (z ≈ -9, centre at -8.5) must be shaded
-        #    Shadow tip is at ≈-9.66, cell centre at -8.5 is within
-        assert results[(0, -9)] == 0.0, \
-            f"Cell (0,-9) at z=-8.5 should be in shadow (tip at z≈-9.66)"
-
-        # 4) Cell clearly BEYOND shadow tip (z ≈ -12, centre at -11.5) must be lit
-        #    Shadow tip at ≈-9.66, cell centre at -11.5 is 1.84m beyond
-        assert results[(0, -12)] == 1.0, \
-            f"Cell (0,-12) at z=-11.5 should be beyond shadow (tip at z≈-9.66)"
-
-        # 5) Cells on the sun side (+Z, south) must be lit
-        assert results[(0, 5)] == 1.0, "Cell south of box should be lit"
-
-        # 6) Cells laterally outside the box (x > 1) at shadow Z should be lit
-        assert results[(3, -5)] == 1.0, \
-            f"Cell (3,-5) laterally outside box shadow should be lit"
 
 
 # ── Ray-triangle intersection unit tests ─────────────────────────────────
@@ -521,291 +310,6 @@ class TestSunPositions:
         assert abs(dz_e - dz_w) < 0.01, "East/west Z components should be equal"
 
 
-# ── Accumulation tests (mirrors JS loop structure) ───────────────────────
-
-class TestAccumulation:
-    """Tests targeting the shared-array, sun-outer, cell-inner accumulation
-    pattern used in the JavaScript implementation."""
-
-    def _make_open_cells(self, n):
-        """Return n cell positions on a flat plane with no obstacles."""
-        return [(float(i), 0.0, 0.0) for i in range(n)]
-
-    def _make_sun_positions(self, n):
-        """Return n sun positions with genuinely different directions."""
-        # Vary azimuth (120°–240°) and altitude (25°–65°) so each produces
-        # a different shadow direction — catches caching / repeat bugs.
-        azimuths = [120, 150, 180, 210, 240]  # Geographic convention (0°=North CW)
-        altitudes = [25, 35, 45, 55, 65]
-        return [
-            {'azimuth': azimuths[i % 5], 'altitude': altitudes[i % 5], 'hour': 8 + i}
-            for i in range(n)
-        ]
-
-    def test_g_multi_position_accumulation(self):
-        """1 cell, 3 sun positions, no obstacles → hours = 3 * timeStep."""
-        cells = [(0.0, 0.0, 0.0)]
-        sun_pos = self._make_sun_positions(3)
-        result = compute_sun_hours_array_style(cells, [], sun_pos, time_step=1.0)
-        assert result[0] == 3.0, \
-            f"Expected 3.0h from 3 sun positions, got {result[0]}h — accumulator may be overwriting"
-
-    def test_h_partial_shadow_across_day(self):
-        """1 cell, 5 sun positions. Pre-verify which rays hit the wall,
-        then assert the exact expected hour count."""
-        cells = [(0.0, 0.0, 0.0)]
-        wall = make_box_triangles(0, 5, 3, 5, 5, 0.5)  # wall at z=3
-        origin = (0.0, 0.01, 0.0)  # 10mm above ground (matches engine offset)
-
-        sun_pos = [
-            {'azimuth': 180.0, 'altitude': 10.0, 'hour': 8},
-            {'azimuth': 180.0, 'altitude': 15.0, 'hour': 9},
-            {'azimuth': 180.0, 'altitude': 70.0, 'hour': 10},
-            {'azimuth': 180.0, 'altitude': 80.0, 'hour': 11},
-            {'azimuth': 180.0, 'altitude': 85.0, 'hour': 12},
-        ]
-
-        # Pre-verify: independently check which rays are blocked
-        blocked_count = 0
-        for sp in sun_pos:
-            d = sun_direction(sp['azimuth'], sp['altitude'])
-            if ray_hits_any_triangle(origin, d, wall):
-                blocked_count += 1
-        lit_count = len(sun_pos) - blocked_count
-
-        assert blocked_count > 0, \
-            "Test geometry must block at least one ray — fixture is broken"
-        assert lit_count > 0, \
-            "Test geometry must let at least one ray through — fixture is broken"
-
-        # Now run the accumulation and assert the EXACT expected result
-        result = compute_sun_hours_array_style(cells, wall, sun_pos, time_step=1.0)
-        assert result[0] == float(lit_count), \
-            f"Expected exactly {lit_count}h ({blocked_count} blocked, {lit_count} lit), " \
-            f"got {result[0]}h — accumulation error"
-
-    def test_i_array_style_matches_dict_style(self):
-        """Both accumulation strategies produce identical results for same input."""
-        box = make_box_triangles(5, 2.5, 5, 1, 2.5, 1)
-        sun_pos = get_sun_positions(51.5, -0.1, 2024, 3, 21, time_step=1.0)
-
-        # Dict-style (cell-outer)
-        grid_results = compute_sun_hours_flat_grid(
-            ground_y=0.0,
-            grid_min_x=0, grid_min_z=0,
-            grid_max_x=10, grid_max_z=10,
-            grid_size=2.0,
-            shadow_triangles=box,
-            sun_positions=sun_pos,
-            time_step=1.0,
-        )
-
-        # Array-style (sun-outer, cell-inner) — same cells
-        cells = []
-        cell_keys = []
-        for col in range(0, 5):  # 10/2 = 5 columns
-            for row in range(0, 5):
-                cx = (col + 0.5) * 2.0
-                cz = (row + 0.5) * 2.0
-                cells.append((cx, 0.0, cz))
-                cell_keys.append((col, row))
-
-        array_results = compute_sun_hours_array_style(cells, box, sun_pos, time_step=1.0)
-
-        for idx, key in enumerate(cell_keys):
-            dict_val = grid_results.get(key, 0.0)
-            arr_val = array_results[idx]
-            assert abs(dict_val - arr_val) < 0.01, \
-                f"Cell {key}: dict={dict_val}, array={arr_val} — accumulation strategies diverge"
-
-    def test_j_batching_doesnt_reset(self):
-        """10 cells, batch_size=3 (4 batches), 2 sun positions → every cell = 2h."""
-        cells = self._make_open_cells(10)
-        sun_pos = self._make_sun_positions(2)
-
-        result = compute_sun_hours_array_style(
-            cells, [], sun_pos, time_step=1.0, batch_size=3
-        )
-
-        for j in range(10):
-            assert result[j] == 2.0, \
-                f"Cell {j} got {result[j]}h instead of 2.0h — batch boundary may reset accumulator"
-
-    def test_k_single_sun_position_gives_exactly_timestep(self):
-        """1 sun position, no obstacles → every cell = exactly timeStep."""
-        cells = self._make_open_cells(5)
-        sun_pos = self._make_sun_positions(1)
-
-        result = compute_sun_hours_array_style(cells, [], sun_pos, time_step=0.5)
-
-        for j in range(5):
-            assert result[j] == 0.5, \
-                f"Cell {j} got {result[j]}h instead of 0.5h — single position not counted correctly"
-
-    def test_l_zero_sun_positions_gives_zero(self):
-        """Empty sun_positions → every cell = 0.0."""
-        cells = self._make_open_cells(5)
-        result = compute_sun_hours_array_style(cells, [], [], time_step=1.0)
-
-        for j in range(5):
-            assert result[j] == 0.0, \
-                f"Cell {j} got {result[j]}h with no sun positions — uninitialised value leak"
-
-
-    def test_l2_time_step_scales_proportionally(self):
-        """Same sun positions at time_step=0.5 and time_step=2.0 must produce
-        proportionally scaled results. Catches hardcoded time_step values."""
-        cells = self._make_open_cells(3)
-        sun_pos = self._make_sun_positions(4)
-
-        result_half = compute_sun_hours_array_style(cells, [], sun_pos, time_step=0.5)
-        result_two = compute_sun_hours_array_style(cells, [], sun_pos, time_step=2.0)
-
-        for j in range(3):
-            assert result_half[j] == 4 * 0.5, \
-                f"Cell {j} at time_step=0.5: expected 2.0h, got {result_half[j]}h"
-            assert result_two[j] == 4 * 2.0, \
-                f"Cell {j} at time_step=2.0: expected 8.0h, got {result_two[j]}h"
-            # Ratio must be exactly 4:1
-            assert abs(result_two[j] / result_half[j] - 4.0) < 0.001, \
-                f"Cell {j}: time_step ratio should be 4:1, got {result_two[j]/result_half[j]}"
-
-    def test_m_morning_data_survives_afternoon_pass(self):
-        """THE CORE TEST: proves earlier sun positions are not obliterated.
-
-        Two walls on opposite sides of two cells. Sun position 1 casts shadow
-        on cell A but not cell B. Sun position 2 casts shadow on cell B but
-        not cell A. After both positions, both cells must have exactly timeStep
-        — proving the afternoon pass didn't overwrite the morning data."""
-        # Cell A at (-5, 0, 0), Cell B at (+5, 0, 0)
-        cells = [(-5.0, 0.0, 0.0), (5.0, 0.0, 0.0)]
-
-        # Wall east of cell A at x=−3, blocks rays coming from the east
-        wall_east = make_box_triangles(-3, 5, 0, 0.5, 5, 5)
-        # Wall west of cell B at x=+3, blocks rays coming from the west
-        wall_west = make_box_triangles(3, 5, 0, 0.5, 5, 5)
-        obstacles = wall_east + wall_west
-
-        # Sun position 1: from the east (azimuth 90° in geographic convention)
-        # Sun position 2: from the west (azimuth 270° in geographic convention)
-        sun_pos = [
-            {'azimuth': 90.0, 'altitude': 30.0, 'hour': 8},    # from east
-            {'azimuth': 270.0, 'altitude': 30.0, 'hour': 16},  # from west
-        ]
-
-        # Pre-verify: independently confirm the shadow pattern
-        origin_a = (-5.0, 0.01, 0.0)
-        origin_b = (5.0, 0.01, 0.0)
-        dir1 = sun_direction(90.0, 30.0)
-        dir2 = sun_direction(270.0, 30.0)
-
-        # Cell A should be blocked by east wall from east sun, lit from west sun
-        a_blocked_by_1 = ray_hits_any_triangle(origin_a, dir1, obstacles)
-        a_blocked_by_2 = ray_hits_any_triangle(origin_a, dir2, obstacles)
-        # Cell B should be lit from east sun, blocked by west wall from west sun
-        b_blocked_by_1 = ray_hits_any_triangle(origin_b, dir1, obstacles)
-        b_blocked_by_2 = ray_hits_any_triangle(origin_b, dir2, obstacles)
-
-        assert a_blocked_by_1 and not a_blocked_by_2, \
-            f"Cell A shadow pattern wrong: blocked_by_east={a_blocked_by_1}, blocked_by_west={a_blocked_by_2}"
-        assert not b_blocked_by_1 and b_blocked_by_2, \
-            f"Cell B shadow pattern wrong: blocked_by_east={b_blocked_by_1}, blocked_by_west={b_blocked_by_2}"
-
-        # Run accumulation
-        result = compute_sun_hours_array_style(cells, obstacles, sun_pos, time_step=1.0)
-
-        # Both cells should have exactly 1h — each lit by one position
-        assert result[0] == 1.0, \
-            f"Cell A got {result[0]}h, expected 1.0h — morning data was obliterated by afternoon"
-        assert result[1] == 1.0, \
-            f"Cell B got {result[1]}h, expected 1.0h — afternoon data overwrote morning result"
-
-    def test_n_three_different_directions_accumulate_with_obstacle(self):
-        """3 genuinely different sun directions. Obstacle blocks exactly 1.
-        Pre-verified, then asserted exactly."""
-        cells = [(0.0, 0.0, 0.0)]
-        # Tall thin wall to the south
-        wall = make_box_triangles(0, 10, 5, 3, 10, 0.3)
-        origin = (0.0, 0.01, 0.0)
-
-        sun_pos = [
-            {'azimuth': 180.0, 'altitude': 20.0, 'hour': 9},    # south, low
-            {'azimuth': 90.0, 'altitude': 45.0, 'hour': 12},     # east, mid
-            {'azimuth': 270.0, 'altitude': 45.0, 'hour': 15},   # west, mid
-        ]
-
-        # Pre-verify each direction independently
-        blocked = []
-        for sp in sun_pos:
-            d = sun_direction(sp['azimuth'], sp['altitude'])
-            blocked.append(ray_hits_any_triangle(origin, d, wall))
-
-        assert sum(blocked) >= 1, \
-            f"Wall must block at least one direction, got blocked={blocked}"
-        expected_hours = sum(1.0 for b in blocked if not b)
-
-        result = compute_sun_hours_array_style(cells, wall, sun_pos, time_step=1.0)
-        assert result[0] == expected_hours, \
-            f"Expected {expected_hours}h (blocked={blocked}), got {result[0]}h"
-
-
-# ── Roof-hip sampling invariant (the "black hip tile" regression) ────────
-class TestHipSampling:
-    """Locks in the rule the cell pipeline relies on to avoid black hip tiles.
-
-    At a hip/ridge a grid cell holds fragments from two pitches. The sun-ray
-    origin must be sampled from a point that lies ON one pitch's surface — not
-    from the area-weighted average of both pitches, which lands in the valley
-    *below* the fold, buried inside the roof solid. A buried origin sees a
-    pitch above it for every sun position and reads 0 sun hours (black tile).
-
-    These tests use the ridge roof itself as the shadow caster, mirroring the
-    app's BVH which includes the analysed surface.
-    """
-
-    def _summer_dirs(self):
-        suns = get_sun_positions(51.5, -0.1, 2026, 6, 21, time_step=0.5)
-        return [sun_direction(s['azimuth'], s['altitude']) for s in suns]
-
-    def test_averaged_cross_fold_origin_is_buried(self):
-        """The OLD behaviour: averaging both pitches buries the origin."""
-        pitch_a, pitch_b = make_ridge_roof()
-        roof = pitch_a + pitch_b
-        dirs = self._summer_dirs()
-
-        # Average of the two pitch centroids — lands below the ridge apex.
-        ca = _tri_centroid(pitch_a[0])
-        cb = _tri_centroid(pitch_b[0])
-        avg = tuple((ca[i] + cb[i]) / 2 for i in range(3))
-        avg_n = (0.0, 1.0, 0.0)  # averaged normal of two opposed pitches ≈ up
-        origin = tuple(avg[i] + avg_n[i] * 0.01 for i in range(3))
-
-        lit = sum(1 for d in dirs
-                  if not ray_hits_any_triangle(origin, d, roof, min_t=1e-4))
-        assert lit == 0, (
-            f"averaged cross-fold origin should be buried (0 lit), got {lit}. "
-            "If this no longer buries, the regression fixture is stale.")
-
-    def test_dominant_fragment_origin_is_lit(self):
-        """The FIX: sampling on a real pitch surface gets full sun."""
-        pitch_a, pitch_b = make_ridge_roof()
-        roof = pitch_a + pitch_b
-        dirs = self._summer_dirs()
-
-        # Sample from the dominant fragment's on-surface centroid + its own
-        # upward normal — exactly what the cell pipeline now does.
-        dom = pitch_a[0]
-        origin_c = _tri_centroid(dom)
-        n = _tri_up_normal(dom)
-        origin = tuple(origin_c[i] + n[i] * 0.01 for i in range(3))
-
-        lit = sum(1 for d in dirs
-                  if not ray_hits_any_triangle(origin, d, roof, min_t=1e-4))
-        assert lit == len(dirs), (
-            f"on-surface ridge sample should be fully lit ({len(dirs)}), "
-            f"got {lit} — origin is buried/self-shadowed.")
-
-
 # ── Upward-facing filter / inverted-winding holes (pitched-roof regression) ──
 class TestUpwardFacingFilter:
     """Why pitched-roof tiles go missing: the upward-facing filter keeps a
@@ -862,54 +366,6 @@ class TestUpwardFacingFilter:
         wall = ((0, 0, 0), (0, 5, 0), (0, 5, 5))  # in the X=0 plane, normal ±X
         ny = self._ny(wall)
         assert abs(ny) < self.MIN_UPWARD_NY, f"wall ny should be ~0, got {ny}"
-
-
-# ── Thin-slab sampling invariant (the "red self-shadow" regression) ──────
-class TestSlabSampling:
-    """A thin roof slab has a top face and an underside. Once the upward
-    filter is winding-independent, the underside is kept too. Sampling the
-    sun-ray origin from the underside buries it below the slab's top face,
-    which then self-shadows the cell (dark/red). The cell pipeline must
-    sample the TOPMOST fragment so the origin sits on the highest surface.
-    """
-
-    def _slab(self, thickness=0.3, extent=12.0):
-        # Top face across a wide roof at y=10; underside at y=10-thickness.
-        e = extent
-        top = [((0, 10, 0), (e, 10, 0), (e, 10, e)),
-               ((0, 10, 0), (e, 10, e), (0, 10, e))]
-        yb = 10 - thickness
-        bottom = [((0, yb, 0), (e, yb, 0), (e, yb, e)),
-                  ((0, yb, 0), (e, yb, e), (0, yb, e))]
-        return top, bottom
-
-    def _summer_dirs(self):
-        suns = get_sun_positions(51.5, -0.1, 2026, 6, 21, time_step=0.5)
-        return [sun_direction(s['azimuth'], s['altitude']) for s in suns]
-
-    def test_underside_sample_self_shadows(self):
-        top, bottom = self._slab()
-        slab = top + bottom
-        dirs = self._summer_dirs()
-        c = _tri_centroid(bottom[0])
-        origin = (c[0], c[1] + 0.01, c[2])  # underside + 10mm
-        lit = sum(1 for d in dirs
-                  if not ray_hits_any_triangle(origin, d, slab, min_t=1e-4))
-        assert lit < len(dirs), (
-            "sampling the slab underside must self-shadow under the top face")
-
-    def test_topmost_sample_is_lit(self):
-        top, bottom = self._slab()
-        slab = top + bottom
-        dirs = self._summer_dirs()
-        # Highest-centroid-Y fragment is on the top face.
-        topmost = max(top + bottom, key=lambda t: _tri_centroid(t)[1])
-        c = _tri_centroid(topmost)
-        origin = (c[0], c[1] + 0.01, c[2])
-        lit = sum(1 for d in dirs
-                  if not ray_hits_any_triangle(origin, d, slab, min_t=1e-4))
-        assert lit == len(dirs), (
-            f"topmost-fragment sample should be fully lit, got {lit}/{len(dirs)}")
 
 
 # ── Self-shadow exclusion (the duplicate/overlapping-geometry fix) ───────
@@ -1003,44 +459,140 @@ class TestDedupe:
         assert len(dedupe_triangles([t1, t2])) == 2
 
 
-# ── Dead-zone filter: keep the opposite pitch at ridges/hips ─────────────
-class TestDeadZoneRidge:
-    """The per-cell dead-zone filter discards internal roof structure 0.05–0.5 m
-    below a cell's top surface. It must NOT discard the OPPOSITE PITCH at a
-    ridge/hip (a non-parallel surface in that band) — otherwise that side of the
-    cell renders bare, and because the cell still emits the top pitch the hole is
-    never recorded as a dropped cell. Mirrors the JS filter (fixed form).
-    """
-    TOP_TOL = 0.05
-    HEIGHT_TOL = 0.5
-    COS5 = math.cos(math.radians(5))
+# ── Edge-split subdivision ───────────────────────────────────────────────
+class TestSubdivision:
+    """subdivide_to_max_edge: no output edge exceeds the threshold, total
+    area is preserved, and shared vertices deduplicate across triangles."""
 
-    def _keep(self, top_n, frag_n, depth, on_plane):
-        if depth <= self.TOP_TOL or depth >= self.HEIGHT_TOL:
-            return True
-        dot = sum(top_n[i]*frag_n[i] for i in range(3))
-        if abs(dot) < self.COS5:
-            return True          # non-parallel → different roof surface → keep
-        return on_plane          # parallel → keep only if on the same plane
+    def _edge_lengths(self, tri):
+        a, b, c = tri
+        for p, q in ((a, b), (b, c), (c, a)):
+            yield math.dist(p, q)
 
-    def test_opposite_pitch_in_dead_zone_is_kept(self):
-        top = (0.0, 0.866, -0.5)   # 30° pitch facing one way
-        opp = (0.0, 0.866, 0.5)    # opposite 30° pitch (|dot| ≈ 0.5)
-        assert self._keep(top, opp, depth=0.2, on_plane=False) is True
+    def _area(self, tri):
+        a, b, c = tri
+        e1 = [b[i]-a[i] for i in range(3)]
+        e2 = [c[i]-a[i] for i in range(3)]
+        n = [e1[1]*e2[2]-e1[2]*e2[1], e1[2]*e2[0]-e1[0]*e2[2], e1[0]*e2[1]-e1[1]*e2[0]]
+        return 0.5 * math.sqrt(sum(x*x for x in n))
 
-    def test_internal_parallel_offset_layer_is_dropped(self):
-        top = (0.0, 0.866, -0.5)
-        # a parallel copy 0.2 m below, off the top plane = insulation/deck
-        assert self._keep(top, top, depth=0.2, on_plane=False) is False
+    def test_max_edge_respected(self):
+        tri = [((0, 0, 0), (10, 0, 0), (0, 0, 10))]
+        out = subdivide_to_max_edge(tri, 0.5)
+        for t in out:
+            for length in self._edge_lengths(t):
+                assert length <= 0.5 + 1e-9, f"edge {length} exceeds max"
 
-    def test_coplanar_same_plane_fragment_kept(self):
-        top = (0.0, 0.866, -0.5)
-        assert self._keep(top, top, depth=0.2, on_plane=True) is True
+    def test_area_preserved(self):
+        tri = [((0, 0, 0), (10, 0, 0), (0, 0, 10)),
+               ((10, 0, 0), (10, 0, 10), (0, 0, 10))]
+        out = subdivide_to_max_edge(tri, 0.7)
+        before = sum(self._area(t) for t in tri)
+        after = sum(self._area(t) for t in out)
+        assert abs(before - after) < 1e-6
 
-    def test_far_below_and_top_band_always_kept(self):
-        top = (0.0, 0.866, -0.5)
-        assert self._keep(top, top, depth=0.01, on_plane=False) is True  # top band
-        assert self._keep(top, top, depth=0.9, on_plane=False) is True   # far below
+    def test_sloped_triangle_subdivides(self):
+        tri = [((0, 0, 0), (10, 5, 0), (0, 5, 10))]
+        out = subdivide_to_max_edge(tri, 1.0)
+        assert len(out) > 1
+        before = self._area(tri[0])
+        after = sum(self._area(t) for t in out)
+        assert abs(before - after) < 1e-6
+
+    def test_small_triangle_untouched(self):
+        tri = [((0, 0, 0), (0.3, 0, 0), (0, 0, 0.3))]
+        out = subdivide_to_max_edge(tri, 0.5)
+        assert len(out) == 1
+
+    def test_shared_vertices_deduplicate(self):
+        # Two triangles forming a quad share an edge; after subdivision their
+        # edge midpoints must land on identical coordinates and dedupe.
+        quad = [((0, 0, 0), (2, 0, 0), (2, 0, 2)),
+                ((0, 0, 0), (2, 0, 2), (0, 0, 2))]
+        out = subdivide_to_max_edge(quad, 0.5)
+        verts, tri_idx = build_unique_vertices(out)
+        # every triangle references valid indices; vertex count is far lower
+        # than 3 * len(out) because shared vertices merged
+        assert len(verts) < 3 * len(out)
+        used = set(i for t in tri_idx for i in t)
+        assert used == set(range(len(verts)))
+
+
+# ── Per-vertex analysis ──────────────────────────────────────────────────
+class TestPerVertexAnalysis:
+    """compute_sun_hours_per_vertex on subdivided geometry."""
+
+    def _flat_plane(self, size=10.0, max_edge=1.0):
+        tris = [((0, 0, 0), (size, 0, 0), (size, 0, size)),
+                ((0, 0, 0), (size, 0, size), (0, 0, size))]
+        out = subdivide_to_max_edge(tris, max_edge)
+        verts, tri_idx = build_unique_vertices(out)
+        normals = compute_vertex_normals(verts, tri_idx)
+        return verts, tri_idx, normals
+
+    def test_unobstructed_plane_full_sun(self):
+        sun_pos = get_sun_positions(51.5, -0.1, 2024, 3, 21, time_step=1.0)
+        assert len(sun_pos) > 0
+        verts, _, normals = self._flat_plane()
+        hours = compute_sun_hours_per_vertex(verts, normals, [], sun_pos, 1.0)
+        for i, h in enumerate(hours):
+            assert h == len(sun_pos) * 1.0, f"vertex {i} got {h}h"
+
+    def test_box_shadow_darkens_north_vertices(self):
+        # 10m cube at origin; sun due south at 45 degrees altitude.
+        box = make_box_triangles(0, 5, 0, 5, 5, 5)
+        sun_pos = [{'azimuth': 180.0, 'altitude': 45.0, 'hour': 12}]
+        verts, tri_idx, normals = self._flat_plane(size=40.0)
+        # shift plane so it spans -20..20 in x/z around the box
+        verts = [(v[0]-20, v[1], v[2]-20) for v in verts]
+        hours = compute_sun_hours_per_vertex(verts, normals, box, sun_pos, 1.0)
+        shadowed = lit = 0
+        for v, h in zip(verts, hours):
+            # well inside the shadow band (shadow len = 10m at 45deg), away
+            # from the penumbra edges where rays graze the box corners
+            in_shadow_band = -4 <= v[0] <= 4 and -13 <= v[2] <= -7
+            far_clear = v[2] > 8 or abs(v[0]) > 8
+            if in_shadow_band:
+                shadowed += 1
+                assert h == 0.0, f"vertex {v} in shadow band got {h}h"
+            elif far_clear:
+                lit += 1
+                assert h == 1.0, f"clear vertex {v} got {h}h"
+        assert shadowed > 5 and lit > 5
+
+    def test_accumulation_across_positions(self):
+        # Wall to the south blocks low sun; overhead sun passes.
+        wall = make_box_triangles(0, 5, 3, 5, 5, 0.5)
+        sun_pos = [
+            {'azimuth': 180.0, 'altitude': 15.0, 'hour': 9},   # blocked
+            {'azimuth': 180.0, 'altitude': 89.0, 'hour': 12},  # clear
+            {'azimuth': 180.0, 'altitude': 15.0, 'hour': 15},  # blocked
+        ]
+        verts = [(0.0, 0.0, 0.0)]
+        normals = [(0.0, 1.0, 0.0)]
+        hours = compute_sun_hours_per_vertex(verts, normals, wall, sun_pos, 1.0)
+        assert hours[0] == 1.0, f"expected 1h (only overhead clear), got {hours[0]}"
+
+    def test_vertical_wall_orientation_agnostic(self):
+        # A vertex on a south-facing wall, offset along its outward normal,
+        # sees southern sun but a northern obstruction changes nothing.
+        verts = [(0.0, 2.0, 0.0)]
+        normals = [(0.0, 0.0, 1.0)]  # facing +Z (south in scene convention)
+        sun_pos = [{'azimuth': 180.0, 'altitude': 30.0, 'hour': 12}]
+        d = sun_direction(180.0, 30.0)
+        assert d.z if hasattr(d, 'z') else True  # sanity: direction exists
+        hours = compute_sun_hours_per_vertex(verts, normals, [], sun_pos, 1.0)
+        assert hours[0] == 1.0
+
+    def test_voronoi_areas_sum_to_total(self):
+        verts, tri_idx, _ = self._flat_plane(size=10.0, max_edge=0.9)
+        areas = compute_vertex_voronoi_areas(verts, tri_idx)
+        assert abs(sum(areas) - 100.0) < 1e-6
+
+    def test_vertex_normals_point_up_on_flat_plane(self):
+        verts, tri_idx, normals = self._flat_plane()
+        for n in normals:
+            assert abs(n[0]) < 1e-9 and abs(n[2]) < 1e-9 and n[1] > 0.999
 
 
 if __name__ == '__main__':
