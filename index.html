@@ -3,7 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SunForm — Sun Hours Analysis</title>
+
+    <title>SunForm | Free Sun Hours &amp; Overshadowing Analysis Tool for Architects</title>
+    <meta name="description" content="SunForm is a free, browser-based sun hours analysis tool for architects and designers. Import an IFC or BIM model, run solar exposure and overshadowing studies on roofs, ground and facades, and see direct sunlight hours as a smooth 3D heatmap. No login, no install.">
+    <meta name="keywords" content="sun hours analysis, overshadowing analysis, solar analysis tool, daylight study, sun path, shadow study, direct sunlight hours, IFC viewer, BIM sunlight, solar exposure, architecture software, free architecture tool, right to light, facade solar analysis, roof solar analysis">
+    <meta name="author" content="Jake White Architecture">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#16213e">
+    <link rel="canonical" href="https://sunform.jakewhitearchitecture.com/">
+
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="SunForm | Free Sun Hours &amp; Overshadowing Analysis for Architects">
+    <meta property="og:description" content="Import an IFC or BIM model and see direct sunlight hours across roofs, ground and facades as a smooth 3D heatmap. Free, browser-based, no login required.">
+    <meta property="og:image" content="https://sunform.jakewhitearchitecture.com/sunform-logo.png">
+    <meta property="og:url" content="https://sunform.jakewhitearchitecture.com/">
+    <meta property="og:site_name" content="SunForm">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="SunForm | Free Sun Hours &amp; Overshadowing Analysis for Architects">
+    <meta name="twitter:description" content="Free, browser-based sun hours and overshadowing analysis for IFC and BIM models. Direct sunlight visualised as a 3D heatmap.">
+    <meta name="twitter:image" content="https://sunform.jakewhitearchitecture.com/sunform-logo.png">
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "SunForm",
+      "applicationCategory": "DesignApplication",
+      "operatingSystem": "Web browser",
+      "description": "Free, browser-based sun hours and overshadowing analysis tool for architects. Import IFC or BIM models and visualise direct sunlight hours across roofs, ground and facades as a 3D heatmap.",
+      "url": "https://sunform.jakewhitearchitecture.com/",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "GBP" },
+      "featureList": [
+        "Sun hours analysis for roofs, ground and facades",
+        "Overshadowing and shadow studies",
+        "IFC and BIM model import",
+        "Smooth 3D sunlight heatmap",
+        "Seasonal comparison",
+        "GLB and PDF export"
+      ],
+      "provider": {
+        "@type": "Organization",
+        "name": "Jake White Architecture",
+        "url": "https://www.jakewhitearchitecture.com"
+      }
+    }
+    </script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -916,14 +961,141 @@
             }
         }
 
+        /* ─── LANDING PAGE (gated launch) ─── */
+        #landing-page {
+            position: fixed; inset: 0; z-index: 2000;
+            background:
+                radial-gradient(1200px 600px at 78% 10%, rgba(15,52,96,0.35), transparent 60%),
+                linear-gradient(160deg, #10182e 0%, #0b1120 100%);
+            color: #e0e0e0; overflow-y: auto;
+            display: flex; flex-direction: column;
+        }
+        #landing-page.hidden { display: none; }
+        #disclaimer-modal { z-index: 3000; }
+        #disclaimer-modal .modal-box { position: relative; }
+        .modal-close {
+            position: absolute; top: 12px; right: 14px;
+            background: none; border: none; color: #8a94ac; font-size: 24px;
+            line-height: 1; cursor: pointer; padding: 2px 6px;
+        }
+        .modal-close:hover { color: #e6e9f0; }
+        .lp-nav {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 16px; padding: 16px 34px; flex-wrap: wrap;
+        }
+        .lp-chips { display: flex; gap: 10px; flex-wrap: wrap; }
+        .lp-chip {
+            font-size: 12.5px; color: #aab4cf;
+            border: 1px solid #24304f; border-radius: 20px;
+            padding: 5px 14px; white-space: nowrap;
+        }
+        .lp-site { font-size: 13px; color: #8a94ac; text-decoration: none; }
+        .lp-site:hover { color: #00CFC8; }
+        .lp-hero {
+            flex: 1; display: grid;
+            grid-template-columns: minmax(0,1fr) minmax(0,1.15fr);
+            gap: 40px; max-width: 1400px; width: 100%;
+            margin: 0 auto; padding: 18px 34px 40px;
+        }
+        .lp-left { min-width: 0; }
+        .lp-logo { width: 210px; max-width: 60%; display: block; margin-bottom: 16px; }
+        .lp-h1 { font-size: 33px; line-height: 1.15; font-weight: 700; color: #E5A50A; margin-bottom: 10px; }
+        .lp-h2 { font-size: 16px; line-height: 1.4; font-weight: 500; color: #c4ccdd; margin-bottom: 16px; }
+        .lp-desc { font-size: 15px; line-height: 1.6; color: #aeb7c9; margin-bottom: 18px; max-width: 640px; }
+        .lp-features { list-style: none; margin: 0 0 20px; padding: 0; }
+        .lp-features li {
+            position: relative; padding-left: 20px; margin-bottom: 9px;
+            font-size: 14px; color: #cdd4e2; line-height: 1.45;
+        }
+        .lp-features li::before {
+            content: ''; position: absolute; left: 0; top: 7px;
+            width: 7px; height: 7px; border-radius: 50%; background: #D4880F;
+        }
+        .lp-designed {
+            border: 1px solid #24304f; border-left: 3px solid #D4880F; border-radius: 8px;
+            padding: 14px 18px; margin-bottom: 22px; background: rgba(15,52,96,0.12);
+        }
+        .lp-designed-label {
+            font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+            color: #E5A50A; font-weight: 700; margin-bottom: 6px;
+        }
+        .lp-designed p { font-size: 13.5px; color: #b3bbcd; line-height: 1.55; }
+        .lp-begin { border: 1px solid #24304f; border-radius: 10px; padding: 18px; background: #131b30; max-width: 640px; }
+        .lp-begin-label {
+            font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+            color: #8a94ac; font-weight: 700; margin-bottom: 12px;
+        }
+        .lp-terms-row {
+            display: flex; align-items: center; gap: 14px; width: 100%;
+            background: #0e1526; border: 1px solid #24304f; border-radius: 8px;
+            padding: 14px 16px; cursor: pointer; text-align: left; color: inherit;
+            margin-bottom: 14px; transition: border-color 0.15s;
+        }
+        .lp-terms-row:hover { border-color: #D4880F; }
+        .lp-terms-icon {
+            flex: none; width: 26px; height: 26px; border-radius: 50%;
+            background: #D4880F; color: #16213e; font-weight: 800;
+            display: flex; align-items: center; justify-content: center; font-size: 15px;
+        }
+        .lp-terms-row.accepted { border-color: #2f5a34; }
+        .lp-terms-row.accepted .lp-terms-icon { background: #4CAF50; color: #0b1120; }
+        .lp-terms-text { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+        .lp-terms-text strong { font-size: 14px; color: #e6e9f0; }
+        .lp-terms-text span { font-size: 12px; color: #8a94ac; }
+        .lp-terms-arrow { color: #8a94ac; font-size: 20px; }
+        .lp-begin-actions { display: flex; gap: 12px; }
+        .lp-decline {
+            flex: none; padding: 12px 22px; border-radius: 8px; cursor: pointer;
+            background: #1a2338; border: 1px solid #2a3654; color: #cdd4e2; font-size: 14px;
+        }
+        .lp-decline:hover { border-color: #3a4668; }
+        .lp-launch {
+            flex: 1; padding: 12px 22px; border-radius: 8px; cursor: pointer; border: none;
+            font-size: 15px; font-weight: 600; color: #fff;
+            background: linear-gradient(135deg, #D4880F, #E5A50A);
+        }
+        .lp-launch:disabled { cursor: not-allowed; color: #8a7a5a; background: #3a2f1a; opacity: 0.75; }
+        .lp-right { min-width: 0; display: flex; flex-direction: column; }
+        .lp-preview-label { font-size: 13px; color: #8a94ac; margin-bottom: 10px; }
+        .lp-preview {
+            position: relative; flex: 1; min-height: 460px;
+            border: 1px solid #24304f; border-radius: 12px; overflow: hidden;
+            background: linear-gradient(150deg, #0e1830 0%, #070b16 70%);
+        }
+        .lp-preview-blur {
+            position: absolute; inset: 0;
+            background:
+                radial-gradient(600px 400px at 72% 55%, rgba(212,136,15,0.12), transparent 60%),
+                linear-gradient(120deg, rgba(22,33,62,0.85) 0 25%, transparent 25%);
+            filter: blur(6px);
+        }
+        .lp-preview-blur::after {
+            content: ''; position: absolute; inset: 0;
+            background: url('/sunform-logo.png') no-repeat center 42% / 220px auto;
+            opacity: 0.06; filter: blur(2px);
+        }
+        .lp-preview-cta {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+            background: #16213e; border: 1px solid #2a3654; color: #e6e9f0;
+            font-size: 15px; font-weight: 600; padding: 14px 26px; border-radius: 8px; cursor: not-allowed;
+        }
+        .lp-preview-cta.ready { cursor: pointer; border-color: #D4880F; color: #E5A50A; }
+        .lp-preview-note { font-size: 12.5px; color: #97a0b6; line-height: 1.5; margin-top: 14px; }
+        .lp-preview-note strong { color: #cdd4e2; }
+        @media (max-width: 900px) {
+            .lp-hero { grid-template-columns: 1fr; }
+            .lp-preview { min-height: 280px; }
+            .lp-h1 { font-size: 27px; }
+        }
     </style>
 </head>
 <body>
     <!-- ─── DISCLAIMER MODAL ─── -->
-    <div class="modal-overlay" id="disclaimer-modal">
+    <div class="modal-overlay hidden" id="disclaimer-modal">
         <div class="modal-box">
+            <button class="modal-close" onclick="closeTerms()" aria-label="Close">&times;</button>
             <img src="/sunform-logo.png" alt="SunForm" class="modal-logo">
-            <h2>SunForm &mdash; Terms of Use</h2>
+            <h2>SunForm Terms of Use &amp; Disclaimer</h2>
 
             <div id="disclaimer-terms">
                 <p>SunForm is currently in active beta development. You are using unfinished software. Outputs may be incomplete, inaccurate, or incorrect &mdash; this is expected at this stage and is part of why your testing matters.</p>
@@ -968,7 +1140,67 @@
                 </label>
             </div>
 
-            <button class="btn-accept" id="disclaimer-accept-btn" disabled onclick="acceptDisclaimer()">Accept &amp; Continue</button>
+            <button class="btn-accept" id="disclaimer-accept-btn" disabled onclick="acceptTerms()">Accept &amp; continue</button>
+        </div>
+    </div>
+
+    <!-- ─── LANDING PAGE (gated launch) ─── -->
+    <div id="landing-page">
+        <nav class="lp-nav">
+            <div class="lp-chips">
+                <span class="lp-chip">Sun hours analysis</span>
+                <span class="lp-chip">Overshadowing study</span>
+                <span class="lp-chip">IFC / BIM import</span>
+                <span class="lp-chip">3D sunlight heatmap</span>
+                <span class="lp-chip">GLB &amp; PDF export</span>
+                <span class="lp-chip">Free tool</span>
+            </div>
+            <a class="lp-site" href="https://www.jakewhitearchitecture.com" target="_blank" rel="noopener">jakewhitearchitecture.com</a>
+        </nav>
+
+        <div class="lp-hero">
+            <div class="lp-left">
+                <img src="/sunform-logo.png" alt="SunForm sun hours analysis tool logo" class="lp-logo">
+                <h1 class="lp-h1">Free sun hours and overshadowing analysis for architects</h1>
+                <h2 class="lp-h2">Import an IFC or BIM model and see direct sunlight hours across roofs, ground and facades as a smooth 3D heatmap.</h2>
+                <p class="lp-desc">SunForm is a free, browser-based solar analysis tool for architects, architectural technologists and designers. Load a building model, pick a location and season, and run a sun hours study to understand daylight, solar exposure and overshadowing across a scheme. Everything runs in your browser, with no login and nothing to install.</p>
+                <ul class="lp-features">
+                    <li>Sun hours analysis on roofs, ground surfaces and vertical facades</li>
+                    <li>Overshadowing and shadow studies driven by real sun paths</li>
+                    <li>Direct IFC and BIM model import via web-ifc</li>
+                    <li>Smooth, per-pixel 3D sunlight heatmap with no visible grid</li>
+                    <li>Seasonal comparison across winter, spring, autumn and summer</li>
+                    <li>Export coloured GLB models and dimensioned PDF plans</li>
+                </ul>
+                <div class="lp-designed">
+                    <div class="lp-designed-label">Designed for</div>
+                    <p>Architects, architectural technologists, surveyors and designers working on residential and small commercial schemes who can critically interpret and verify solar analysis results.</p>
+                </div>
+                <div class="lp-begin">
+                    <div class="lp-begin-label">Before you begin</div>
+                    <button class="lp-terms-row" id="lp-terms-row" onclick="openTerms()">
+                        <span class="lp-terms-icon" id="lp-terms-icon">!</span>
+                        <span class="lp-terms-text">
+                            <strong id="lp-terms-title">Read and accept the Terms of Use</strong>
+                            <span id="lp-terms-sub">Open, read to the end, then tick the confirmations</span>
+                        </span>
+                        <span class="lp-terms-arrow">&rsaquo;</span>
+                    </button>
+                    <div class="lp-begin-actions">
+                        <button class="lp-decline" onclick="declineTool()">Decline</button>
+                        <button class="lp-launch" id="lp-launch-btn" disabled onclick="launchTool()">Launch tool &rarr;</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lp-right">
+                <div class="lp-preview-label">Tool preview, accept the terms to launch</div>
+                <div class="lp-preview">
+                    <div class="lp-preview-blur"></div>
+                    <button class="lp-preview-cta" id="lp-preview-cta" onclick="launchTool()">Accept terms to launch</button>
+                </div>
+                <p class="lp-preview-note"><strong>SunForm does not verify compliance.</strong> It is an indicative design aid, not a substitute for professional daylighting or right to light consultancy. Sun hours results depend on the accuracy of your model and inputs, and all outputs must be independently checked by a competent person before use.</p>
+            </div>
         </div>
     </div>
 
@@ -4234,8 +4466,41 @@
             document.getElementById('disclaimer-accept-btn').disabled = !allChecked;
         }
 
-        function acceptDisclaimer() {
+        let sunformTermsAccepted = false;
+
+        function openTerms() {
+            document.getElementById('disclaimer-modal').classList.remove('hidden');
+        }
+
+        function closeTerms() {
             document.getElementById('disclaimer-modal').classList.add('hidden');
+        }
+
+        function acceptTerms() {
+            sunformTermsAccepted = true;
+            document.getElementById('disclaimer-modal').classList.add('hidden');
+
+            document.getElementById('lp-launch-btn').disabled = false;
+
+            const cta = document.getElementById('lp-preview-cta');
+            cta.classList.add('ready');
+            cta.textContent = 'Launch tool';
+
+            document.getElementById('lp-terms-row').classList.add('accepted');
+            document.getElementById('lp-terms-icon').textContent = '\u2713';
+            document.getElementById('lp-terms-title').textContent = 'Terms accepted';
+            document.getElementById('lp-terms-sub').textContent = 'You can review them again any time';
+        }
+
+        function launchTool() {
+            if (!sunformTermsAccepted) { openTerms(); return; }
+            document.getElementById('landing-page').classList.add('hidden');
+            // The 3D viewport was covered, so size it now that it is visible
+            window.dispatchEvent(new Event('resize'));
+        }
+
+        function declineTool() {
+            window.location.href = 'https://www.jakewhitearchitecture.com';
         }
 
         // ─── DOWNLOAD CONFIRMATION ───
