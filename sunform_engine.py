@@ -263,6 +263,33 @@ def compute_sun_hours_per_vertex(
     return hours
 
 
+def smooth_vertex_field(values, tri_indices, iterations: int = 2, lam: float = 0.5):
+    """Neighbour-averaged (Laplacian) smoothing of a per-vertex scalar field.
+
+    Per-vertex shadow tests are binary per sun position, so a sharp shadow
+    terminator sampled at finite vertex spacing aliases into a zigzag that
+    follows the triangulation. Averaging each vertex with its edge-adjacent
+    neighbours filters that high-frequency zigzag (roughly a one-vertex-spacing
+    penumbra) while leaving flat regions exactly unchanged.
+    """
+    n = len(values)
+    nbrs = [set() for _ in range(n)]
+    for (a, b, c) in tri_indices:
+        nbrs[a].update((b, c))
+        nbrs[b].update((a, c))
+        nbrs[c].update((a, b))
+    v = list(values)
+    for _ in range(iterations):
+        nv = list(v)
+        for i in range(n):
+            if not nbrs[i]:
+                continue
+            avg = sum(v[j] for j in nbrs[i]) / len(nbrs[i])
+            nv[i] = (1 - lam) * v[i] + lam * avg
+        v = nv
+    return v
+
+
 # ── Self-shadow exclusion (ignore a surface's own near-coplanar geometry) ──
 
 def ray_hits_real_occluder(

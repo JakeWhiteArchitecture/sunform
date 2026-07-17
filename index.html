@@ -3328,6 +3328,58 @@
             return geom;
         }
 
+        // ─── VERTEX FIELD SMOOTHING (shadow-edge anti-aliasing) ───
+        // Per-vertex shadow tests are binary per sun position, so a sharp
+        // shadow terminator sampled at finite vertex spacing aliases into a
+        // zigzag that follows the triangulation (and eave-edge vertices
+        // flicker on grazing hits). Two neighbour-averaging passes filter that
+        // high-frequency zigzag, roughly a one-vertex-spacing penumbra, while
+        // leaving flat regions exactly unchanged.
+        function buildVertexAdjacency(geom) {
+            if (geom.nbrStart) return;
+            const n = geom.vertexCount;
+            const idx = geom.index;
+            const sets = new Array(n);
+            for (let i = 0; i < n; i++) sets[i] = new Set();
+            for (let t = 0; t < idx.length; t += 3) {
+                const a = idx[t], b = idx[t+1], c = idx[t+2];
+                sets[a].add(b); sets[a].add(c);
+                sets[b].add(a); sets[b].add(c);
+                sets[c].add(a); sets[c].add(b);
+            }
+            let total = 0;
+            for (let i = 0; i < n; i++) total += sets[i].size;
+            const start = new Uint32Array(n + 1);
+            const list = new Uint32Array(total);
+            let p = 0;
+            for (let i = 0; i < n; i++) {
+                start[i] = p;
+                for (const j of sets[i]) list[p++] = j;
+            }
+            start[n] = p;
+            geom.nbrStart = start;
+            geom.nbrList = list;
+        }
+
+        function smoothVertexField(values, geom, iterations, lam) {
+            buildVertexAdjacency(geom);
+            const n = geom.vertexCount;
+            const start = geom.nbrStart, list = geom.nbrList;
+            let v = values;
+            let buf = new Float32Array(n);
+            for (let it = 0; it < iterations; it++) {
+                for (let i = 0; i < n; i++) {
+                    const s = start[i], e = start[i+1];
+                    if (e === s) { buf[i] = v[i]; continue; }
+                    let sum = 0;
+                    for (let k = s; k < e; k++) sum += v[list[k]];
+                    buf[i] = (1 - lam) * v[i] + lam * (sum / (e - s));
+                }
+                const tmp = v; v = buf; buf = tmp;
+            }
+            return v;
+        }
+
         // ─── RAY CAST SUN HOURS (per unique vertex) ───
         async function runTerrainAnalysis(latitude, longitude, timeStep, dateStr, geom) {
 
@@ -3381,6 +3433,11 @@
                 }
             }
 
+            // Anti-alias sharp shadow terminators (see smoothVertexField)
+            showStatus('Smoothing shadow boundaries...');
+            await new Promise(r => setTimeout(r, 0));
+            const smoothedHours = smoothVertexField(vertexSunHours, geom, 2, 0.5);
+
             // Summary statistics: vertex Voronoi-area weighting (one-third of
             // each adjacent triangle's area per vertex)
             const areas = geom.areas;
@@ -3389,7 +3446,7 @@
             let sumHoursWeighted = 0;
             for (let i = 0; i < n; i++) {
                 const a = areas[i];
-                const h = vertexSunHours[i];
+                const h = smoothedHours[i];
                 totalArea += a;
                 sumHoursWeighted += h * a;
                 if (h < minHours) minHours = h;
@@ -3399,7 +3456,7 @@
 
             return {
                 geom: geom,
-                vertexSunHours: vertexSunHours,
+                vertexSunHours: smoothedHours,
                 maxEdge: cachedMaxEdge,
                 sunPositions: sunPositions,
                 summary: {
