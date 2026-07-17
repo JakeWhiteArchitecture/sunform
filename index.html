@@ -1154,6 +1154,7 @@
                     <button class="btn btn-secondary" id="pdf-btn" onclick="event.stopPropagation(); showDownloadConfirm('pdf');" style="flex:1;">Download PDF</button>
                 </div>
                 <button class="btn btn-secondary" onclick="event.stopPropagation(); resetWorkflow();" style="margin-top:8px;">New Analysis</button>
+                <button class="btn btn-secondary" onclick="event.stopPropagation(); openBetaFeedback();" style="margin-top:8px; width:100%; font-size:11px; padding:6px 14px;">Provide Beta Testing Feedback</button>
                 <div class="bug-report">
                     Results look wrong? <a id="bug-report-link" href="#">Report an issue</a>
                 </div>
@@ -1179,6 +1180,101 @@
             <div class="btn-row">
                 <button class="btn-cancel" onclick="hideDownloadConfirm()">Cancel</button>
                 <button class="btn-proceed" id="download-confirm-btn" disabled onclick="proceedDownload()">Download</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── BETA FEEDBACK WIZARD MODAL ─── -->
+    <div class="modal-overlay hidden" id="beta-feedback-modal">
+        <div class="modal-box" style="max-width:520px;">
+            <!-- Step 1: Instructions + generated challenge -->
+            <div id="bf-step-1">
+                <h2 style="margin-bottom:12px;">Beta Testing Feedback</h2>
+                <p style="margin-bottom:6px;"><a id="bf-suncalc-link" href="#" target="_blank" rel="noopener" style="color:#00CFC8; text-decoration:underline; font-weight:bold;">Check this result on SunCalc.org &rarr;</a></p>
+                <p style="margin-bottom:14px; color:#aaa; font-size:12px;">Open the link, then compare the Azimuth and Altitude values shown on SunCalc with SunForm's values below.</p>
+
+                <div style="background:#0a1628; border:1px solid #0f3460; border-radius:6px; padding:12px 16px; margin-bottom:14px; font-size:13px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                        <span style="color:#888;">Latitude:</span>
+                        <span id="bf-lat" style="color:#00CFC8; font-family:monospace;"></span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                        <span style="color:#888;">Longitude:</span>
+                        <span id="bf-lng" style="color:#00CFC8; font-family:monospace;"></span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                        <span style="color:#888;">Date:</span>
+                        <span id="bf-date" style="color:#00CFC8; font-family:monospace;"></span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between;">
+                        <span style="color:#888;">Time (local clock):</span>
+                        <span id="bf-time" style="color:#00CFC8; font-family:monospace;"></span>
+                    </div>
+                </div>
+
+                <p style="margin-bottom:10px; font-size:12px;">Enter the values from your chosen calculator:</p>
+                <div style="display:flex; gap:12px; margin-bottom:14px;">
+                    <div style="flex:1;">
+                        <label style="font-size:11px; color:#888; display:block; margin-bottom:3px;">Azimuth (deg)</label>
+                        <input type="number" id="bf-user-azimuth" step="0.01" placeholder="e.g. 165.3" style="width:100%; padding:6px 8px; background:#0a1628; border:1px solid #0f3460; color:#e0e0e0; border-radius:4px; font-size:13px;">
+                    </div>
+                    <div style="flex:1;">
+                        <label style="font-size:11px; color:#888; display:block; margin-bottom:3px;">Altitude (deg)</label>
+                        <input type="number" id="bf-user-altitude" step="0.01" placeholder="e.g. 42.7" style="width:100%; padding:6px 8px; background:#0a1628; border:1px solid #0f3460; color:#e0e0e0; border-radius:4px; font-size:13px;">
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:10px;">
+                    <button class="btn btn-secondary" onclick="closeBetaFeedback()" style="flex:1;">Cancel</button>
+                    <button class="btn btn-primary" onclick="checkBetaFeedback()" style="flex:1;">Check</button>
+                </div>
+            </div>
+
+            <!-- Step 2: Results comparison -->
+            <div id="bf-step-2" style="display:none;">
+                <h2 style="margin-bottom:12px;">Results Comparison</h2>
+
+                <div style="background:#0a1628; border:1px solid #0f3460; border-radius:6px; padding:12px 16px; margin-bottom:6px; font-size:13px;">
+                    <div style="font-size:11px; color:#888; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">Your Input (external calculator)</div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                        <span style="color:#888;">Azimuth:</span>
+                        <span id="bf-user-az-result" style="color:#e0e0e0; font-family:monospace;"></span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between;">
+                        <span style="color:#888;">Altitude:</span>
+                        <span id="bf-user-alt-result" style="color:#e0e0e0; font-family:monospace;"></span>
+                    </div>
+                </div>
+
+                <div style="background:#0a1628; border:1px solid #0f3460; border-radius:6px; padding:12px 16px; margin-bottom:6px; font-size:13px;">
+                    <div style="font-size:11px; color:#888; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">SunForm Calculated</div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                        <span style="color:#888;">Azimuth:</span>
+                        <span id="bf-calc-az-result" style="color:#00CFC8; font-family:monospace;"></span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between;">
+                        <span style="color:#888;">Altitude:</span>
+                        <span id="bf-calc-alt-result" style="color:#00CFC8; font-family:monospace;"></span>
+                    </div>
+                </div>
+
+                <div style="background:#0a1628; border:1px solid #0f3460; border-radius:6px; padding:12px 16px; margin-bottom:14px; font-size:13px;">
+                    <div style="font-size:11px; color:#888; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">Difference</div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                        <span style="color:#888;">Azimuth:</span>
+                        <span id="bf-diff-az" style="font-family:monospace;"></span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                        <span style="color:#888;">Altitude:</span>
+                        <span id="bf-diff-alt" style="font-family:monospace;"></span>
+                    </div>
+                    <div id="bf-verdict" style="text-align:center; font-size:13px; font-weight:bold; padding:6px; border-radius:4px;"></div>
+                </div>
+
+                <div style="display:flex; gap:10px;">
+                    <button class="btn btn-secondary" onclick="closeBetaFeedback()" style="flex:1;">Close</button>
+                    <button class="btn btn-primary" onclick="sendBetaFeedback()" style="flex:1;">Send Feedback</button>
+                </div>
             </div>
         </div>
     </div>
@@ -3952,6 +4048,181 @@
             link.href = 'mailto:jake@jakewhitearchitecture.com?subject=' +
                 encodeURIComponent('SunForm Bug Report') +
                 '&body=' + encodeURIComponent(body);
+        }
+
+        // ─── BETA FEEDBACK WIZARD (sun position verification) ───
+        let bfChallenge = null;
+
+        function openBetaFeedback() {
+            const lat = parseFloat(document.getElementById('latitude').value) || 51.5074;
+            const lng = parseFloat(document.getElementById('longitude').value) || -0.1278;
+
+            // Pick a random date spread across the year
+            const month = Math.floor(Math.random() * 12);
+            const day = Math.floor(Math.random() * 28) + 1;
+            const year = new Date().getFullYear();
+            const dateStr = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+
+            // Get all sun positions for that date at 1-hour steps
+            const positions = getSunPositions(lat, lng, dateStr, 1);
+            if (positions.length === 0) {
+                alert('No visible sun positions found for this date and location. Please set your site coordinates first.');
+                return;
+            }
+
+            // Pick a random hour from those where the sun is up
+            const pick = positions[Math.floor(Math.random() * positions.length)];
+
+            bfChallenge = {
+                lat: lat,
+                lng: lng,
+                dateStr: dateStr,
+                hour: pick.hour,
+                localHour: null,  // set below after BST calc
+                calcAzimuth: pick.azimuth,
+                calcAltitude: pick.altitude
+            };
+
+            // Convert UTC hour to local clock time (UK: UTC in winter, UTC+1 in BST)
+            function isUKBST(dateStr) {
+                const y = parseInt(dateStr.split('-')[0]);
+                const m = parseInt(dateStr.split('-')[1]);
+                const d = parseInt(dateStr.split('-')[2]);
+                if (m < 3 || m > 10) return false;
+                if (m > 3 && m < 10) return true;
+                // March: BST starts last Sunday
+                if (m === 3) {
+                    const lastDay = new Date(y, 2, 31).getDay();
+                    const lastSun = 31 - lastDay;
+                    return d >= lastSun;
+                }
+                // October: BST ends last Sunday
+                const lastDay = new Date(y, 9, 31).getDay();
+                const lastSun = 31 - lastDay;
+                return d < lastSun;
+            }
+
+            const bstOffset = isUKBST(dateStr) ? 1 : 0;
+            const localHour = pick.hour + bstOffset;
+            bfChallenge.localHour = localHour;
+            bfChallenge.utcOffset = bstOffset;
+
+            // Build SunCalc URL: https://www.suncalc.org/#/{lat},{lon},{zoom}/{YYYY.MM.DD}/{HH:MM}/1/3
+            const suncalcDate = dateStr.replace(/-/g, '.');
+            const suncalcTime = String(localHour).padStart(2, '0') + ':00';
+            const suncalcUrl = 'https://www.suncalc.org/#/' + lat.toFixed(4) + ',' + lng.toFixed(4) + ',9/' + suncalcDate + '/' + suncalcTime + '/1/3';
+            document.getElementById('bf-suncalc-link').href = suncalcUrl;
+
+            // Populate the wizard
+            document.getElementById('bf-lat').textContent = lat.toFixed(4);
+            document.getElementById('bf-lng').textContent = lng.toFixed(4);
+            document.getElementById('bf-date').textContent = dateStr;
+            document.getElementById('bf-time').textContent = suncalcTime;
+            document.getElementById('bf-user-azimuth').value = '';
+            document.getElementById('bf-user-altitude').value = '';
+
+            // Show step 1, hide step 2
+            document.getElementById('bf-step-1').style.display = '';
+            document.getElementById('bf-step-2').style.display = 'none';
+            document.getElementById('beta-feedback-modal').classList.remove('hidden');
+        }
+
+        function closeBetaFeedback() {
+            document.getElementById('beta-feedback-modal').classList.add('hidden');
+        }
+
+        function checkBetaFeedback() {
+            const userAz = parseFloat(document.getElementById('bf-user-azimuth').value);
+            const userAlt = parseFloat(document.getElementById('bf-user-altitude').value);
+            if (isNaN(userAz) || isNaN(userAlt)) {
+                alert('Please enter both azimuth and altitude values.');
+                return;
+            }
+
+            const calcAz = bfChallenge.calcAzimuth;
+            const calcAlt = bfChallenge.calcAltitude;
+            const diffAz = Math.abs(userAz - calcAz);
+            const diffAlt = Math.abs(userAlt - calcAlt);
+            const pctAz = calcAz !== 0 ? (diffAz / Math.abs(calcAz)) * 100 : diffAz;
+            let pctAlt = calcAlt !== 0 ? (diffAlt / Math.abs(calcAlt)) * 100 : diffAlt;
+
+            // For near-horizon altitudes, percentage is misleading; use a degree
+            // threshold instead (<0.5 deg good, <1 deg acceptable).
+            if (Math.abs(calcAlt) < 5) {
+                pctAlt = diffAlt <= 0.5 ? 0.5 : diffAlt <= 1 ? 1.5 : 3;
+            }
+
+            // Store for email
+            bfChallenge.userAzimuth = userAz;
+            bfChallenge.userAltitude = userAlt;
+            bfChallenge.diffAz = diffAz;
+            bfChallenge.diffAlt = diffAlt;
+
+            // Populate results
+            document.getElementById('bf-user-az-result').textContent = userAz.toFixed(2) + '°';
+            document.getElementById('bf-user-alt-result').textContent = userAlt.toFixed(2) + '°';
+            document.getElementById('bf-calc-az-result').textContent = calcAz.toFixed(2) + '°';
+            document.getElementById('bf-calc-alt-result').textContent = calcAlt.toFixed(2) + '°';
+
+            const diffAzEl = document.getElementById('bf-diff-az');
+            const diffAltEl = document.getElementById('bf-diff-alt');
+            diffAzEl.textContent = diffAz.toFixed(2) + '° (' + pctAz.toFixed(1) + '%)';
+            diffAltEl.textContent = diffAlt.toFixed(2) + '° (' + pctAlt.toFixed(1) + '%)';
+            diffAzEl.style.color = pctAz <= 1 ? '#4CAF50' : pctAz <= 2 ? '#FFA726' : '#FF5252';
+            diffAltEl.style.color = pctAlt <= 1 ? '#4CAF50' : pctAlt <= 2 ? '#FFA726' : '#FF5252';
+
+            const maxPct = Math.max(pctAz, pctAlt);
+            const verdict = document.getElementById('bf-verdict');
+            if (maxPct <= 1) {
+                verdict.textContent = 'Good match, within 1%';
+                verdict.style.background = 'rgba(76,175,80,0.15)';
+                verdict.style.color = '#4CAF50';
+            } else if (maxPct <= 2) {
+                verdict.textContent = 'Acceptable match, within 2%';
+                verdict.style.background = 'rgba(255,167,38,0.15)';
+                verdict.style.color = '#FFA726';
+            } else {
+                verdict.textContent = 'Significant difference detected';
+                verdict.style.background = 'rgba(255,82,82,0.15)';
+                verdict.style.color = '#FF5252';
+            }
+
+            // Switch to step 2
+            document.getElementById('bf-step-1').style.display = 'none';
+            document.getElementById('bf-step-2').style.display = '';
+        }
+
+        function sendBetaFeedback() {
+            const c = bfChallenge;
+            const emailMaxPct = Math.max(
+                c.diffAz / Math.abs(bfChallenge.calcAzimuth) * 100,
+                c.diffAlt / Math.abs(bfChallenge.calcAltitude) * 100
+            );
+            const matchStatus = emailMaxPct <= 1 ? 'GOOD MATCH' : emailMaxPct <= 2 ? 'ACCEPTABLE MATCH' : 'DIFFERENCE DETECTED';
+
+            const subject = encodeURIComponent('SunForm Beta Feedback: ' + matchStatus);
+            const body = encodeURIComponent(
+                'SunForm Beta Testing Feedback\n' +
+                '================================\n\n' +
+                'Site Location\n' +
+                '  Latitude:   ' + c.lat.toFixed(4) + '\n' +
+                '  Longitude:  ' + c.lng.toFixed(4) + '\n\n' +
+                'Test Parameters\n' +
+                '  Date:       ' + c.dateStr + '\n' +
+                '  Time:       ' + String(c.localHour).padStart(2, '0') + ':00 (UTC+' + c.utcOffset + ') / ' + String(c.hour).padStart(2, '0') + ':00 (UTC)\n\n' +
+                'User Input (external calculator)\n' +
+                '  Azimuth:    ' + c.userAzimuth.toFixed(2) + '°\n' +
+                '  Altitude:   ' + c.userAltitude.toFixed(2) + '°\n\n' +
+                'SunForm Calculated\n' +
+                '  Azimuth:    ' + c.calcAzimuth.toFixed(2) + '°\n' +
+                '  Altitude:   ' + c.calcAltitude.toFixed(2) + '°\n\n' +
+                'Difference\n' +
+                '  Azimuth:    ' + c.diffAz.toFixed(2) + '°\n' +
+                '  Altitude:   ' + c.diffAlt.toFixed(2) + '°\n\n' +
+                'Verdict: ' + matchStatus + '\n'
+            );
+
+            window.location.href = 'mailto:sunform@jakewhitearchitecture.com?subject=' + subject + '&body=' + body;
         }
 
         // ─── DISCLAIMER MODAL ───
