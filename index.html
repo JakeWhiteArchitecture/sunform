@@ -10,19 +10,19 @@
     <meta name="author" content="Jake White Architecture">
     <meta name="robots" content="index, follow">
     <meta name="theme-color" content="#16213e">
-    <link rel="canonical" href="https://sunform.jakewhitearchitecture.com/">
+    <link rel="canonical" href="https://www.jakewhitearchitecture.com/sunform">
 
     <meta property="og:type" content="website">
     <meta property="og:title" content="SunForm | Free Sun Hours &amp; Overshadowing Analysis for Architects">
     <meta property="og:description" content="Import an IFC or BIM model and see direct sunlight hours across roofs, ground and facades as a smooth 3D heatmap. Free, browser-based, no login required.">
-    <meta property="og:image" content="https://sunform.jakewhitearchitecture.com/sunform-logo.png">
-    <meta property="og:url" content="https://sunform.jakewhitearchitecture.com/">
+    <meta property="og:image" content="https://www.jakewhitearchitecture.com/sunform/sunform-logo.png">
+    <meta property="og:url" content="https://www.jakewhitearchitecture.com/sunform">
     <meta property="og:site_name" content="SunForm">
 
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="SunForm | Free Sun Hours &amp; Overshadowing Analysis for Architects">
     <meta name="twitter:description" content="Free, browser-based sun hours and overshadowing analysis for IFC and BIM models. Direct sunlight visualised as a 3D heatmap.">
-    <meta name="twitter:image" content="https://sunform.jakewhitearchitecture.com/sunform-logo.png">
+    <meta name="twitter:image" content="https://www.jakewhitearchitecture.com/sunform/sunform-logo.png">
 
     <script type="application/ld+json">
     {
@@ -32,7 +32,7 @@
       "applicationCategory": "DesignApplication",
       "operatingSystem": "Web browser",
       "description": "Free, browser-based sun hours and overshadowing analysis tool for architects. Import IFC or BIM models and visualise direct sunlight hours across roofs, ground and facades as a 3D heatmap.",
-      "url": "https://sunform.jakewhitearchitecture.com/",
+      "url": "https://www.jakewhitearchitecture.com/sunform",
       "offers": { "@type": "Offer", "price": "0", "priceCurrency": "GBP" },
       "featureList": [
         "Sun hours analysis for roofs, ground and facades",
@@ -416,7 +416,7 @@
             display: none;
             position: absolute;
             right: 20px;
-            bottom: 60px;
+            bottom: 110px;
             z-index: 10;
             width: 36px;
             text-align: center;
@@ -877,23 +877,33 @@
         /* ─── COFFEE BUTTON ─── */
         .coffee-wrap {
             position: absolute;
-            top: 32px;
-            right: 20px;
+            bottom: 14px;
+            right: 16px;
             z-index: 10;
-            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            align-items: flex-end;
         }
-        .coffee-btn {
-            display: inline-block;
-            background: rgba(212,136,15,0.85);
-            color: #fff;
-            font-size: 11px;
+        .coffee-btn, .github-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 12px;
             font-weight: 600;
-            padding: 6px 14px;
-            border-radius: 4px;
+            padding: 7px 14px;
+            border-radius: 20px;
             text-decoration: none;
-            letter-spacing: 0.3px;
+            letter-spacing: 0.2px;
+            border: 1px solid transparent;
             backdrop-filter: blur(4px);
+            white-space: nowrap;
         }
+        .coffee-btn { background: rgba(212,136,15,0.9); color: #fff; }
+        .coffee-btn:hover { background: #E5A50A; }
+        .github-btn { background: rgba(22,33,62,0.92); color: #e6e9f0; border-color: #24304f; }
+        .github-btn:hover { border-color: #3a4668; }
+        .github-btn .gh-star { color: #E5A50A; }
 
         /* ─── RESPONSIVE ─── */
         @media (max-width: 900px) {
@@ -916,8 +926,8 @@
                 right: 6px;
             }
             .coffee-wrap {
-                right: 6px;
-                top: 28px;
+                right: 8px;
+                bottom: 10px;
             }
             .coffee-btn {
                 font-size: 10px;
@@ -928,7 +938,7 @@
             }
             .colour-legend {
                 right: 8px;
-                bottom: 40px;
+                bottom: 96px;
             }
         }
 
@@ -953,8 +963,8 @@
                 top: 6px;
             }
             .coffee-wrap {
-                right: 4px;
-                top: 22px;
+                right: 6px;
+                bottom: 8px;
             }
             .season-switcher {
                 top: 6px;
@@ -1555,8 +1565,11 @@
         <div class="fly-crosshair" id="fly-crosshair">+</div>
         <div class="viewport-info" id="viewport-info">Orbit: drag | Zoom: scroll | Pan: right-drag &nbsp;|&nbsp; F: fly mode &nbsp; O: orbit mode</div>
         <div class="coffee-wrap">
-            <a class="coffee-btn" href="https://buymeacoffee.com/jakewhite" target="_blank" rel="noopener noreferrer">
-                ☕ Buy me a coffee
+            <a class="coffee-btn" href="https://buymeacoffee.com/jakewhite" target="_blank" rel="noopener noreferrer">☕ Buy me a coffee</a>
+            <a class="github-btn" href="https://github.com/JakeWhiteArchitecture/sunform" target="_blank" rel="noopener noreferrer">
+                <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" style="flex:none;"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.02-1.49-2.22.48-2.69-1.07-2.69-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.05-.49.05-.49.81.06 1.23.83 1.23.83.72 1.23 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                SunForm
+                <span class="gh-star">&#9733; Star</span>
             </a>
         </div>
         <div class="north-arrow" id="north-arrow">
