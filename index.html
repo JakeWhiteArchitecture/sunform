@@ -3,7 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SunForm — Sun Hours Analysis</title>
+
+    <title>SunForm | Free Sun Hours &amp; Overshadowing Analysis Tool for Architects</title>
+    <meta name="description" content="SunForm is a free, browser-based sun hours analysis tool for architects and designers. Import an IFC or BIM model, run solar exposure and overshadowing studies on roofs, ground and facades, and see direct sunlight hours as a smooth 3D heatmap. No login, no install.">
+    <meta name="keywords" content="sun hours analysis, overshadowing analysis, solar analysis tool, daylight study, sun path, shadow study, direct sunlight hours, IFC viewer, BIM sunlight, solar exposure, architecture software, free architecture tool, right to light, facade solar analysis, roof solar analysis">
+    <meta name="author" content="Jake White Architecture">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#16213e">
+    <link rel="canonical" href="https://sunform.jakewhitearchitecture.com/">
+
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="SunForm | Free Sun Hours &amp; Overshadowing Analysis for Architects">
+    <meta property="og:description" content="Import an IFC or BIM model and see direct sunlight hours across roofs, ground and facades as a smooth 3D heatmap. Free, browser-based, no login required.">
+    <meta property="og:image" content="https://sunform.jakewhitearchitecture.com/sunform-logo.png">
+    <meta property="og:url" content="https://sunform.jakewhitearchitecture.com/">
+    <meta property="og:site_name" content="SunForm">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="SunForm | Free Sun Hours &amp; Overshadowing Analysis for Architects">
+    <meta name="twitter:description" content="Free, browser-based sun hours and overshadowing analysis for IFC and BIM models. Direct sunlight visualised as a 3D heatmap.">
+    <meta name="twitter:image" content="https://sunform.jakewhitearchitecture.com/sunform-logo.png">
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "SunForm",
+      "applicationCategory": "DesignApplication",
+      "operatingSystem": "Web browser",
+      "description": "Free, browser-based sun hours and overshadowing analysis tool for architects. Import IFC or BIM models and visualise direct sunlight hours across roofs, ground and facades as a 3D heatmap.",
+      "url": "https://sunform.jakewhitearchitecture.com/",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "GBP" },
+      "featureList": [
+        "Sun hours analysis for roofs, ground and facades",
+        "Overshadowing and shadow studies",
+        "IFC and BIM model import",
+        "Smooth 3D sunlight heatmap",
+        "Seasonal comparison",
+        "GLB and PDF export"
+      ],
+      "provider": {
+        "@type": "Organization",
+        "name": "Jake White Architecture",
+        "url": "https://www.jakewhitearchitecture.com"
+      }
+    }
+    </script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -916,14 +961,172 @@
             }
         }
 
+        /* ─── LANDING PAGE (gated launch) ─── */
+        #landing-page {
+            position: fixed; inset: 0; z-index: 2000;
+            background:
+                radial-gradient(1200px 600px at 78% 10%, rgba(15,52,96,0.35), transparent 60%),
+                linear-gradient(160deg, #10182e 0%, #0b1120 100%);
+            color: #e0e0e0; overflow-y: auto;
+            display: flex; flex-direction: column;
+        }
+        #landing-page.hidden { display: none; }
+        #disclaimer-modal { z-index: 3000; }
+        #disclaimer-modal .modal-box { position: relative; }
+        .modal-close {
+            position: absolute; top: 12px; right: 14px;
+            background: none; border: none; color: #8a94ac; font-size: 24px;
+            line-height: 1; cursor: pointer; padding: 2px 6px;
+        }
+        .modal-close:hover { color: #e6e9f0; }
+        .lp-nav {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 16px; padding: 16px 34px; flex-wrap: wrap;
+        }
+        .lp-chips { display: flex; gap: 10px; flex-wrap: wrap; }
+        .lp-chip {
+            font-size: 12.5px; color: #aab4cf;
+            border: 1px solid #24304f; border-radius: 20px;
+            padding: 5px 14px; white-space: nowrap;
+        }
+        .lp-site { font-size: 13px; color: #8a94ac; text-decoration: none; }
+        .lp-site:hover { color: #00CFC8; }
+        .lp-hero {
+            flex: 1; display: grid;
+            grid-template-columns: minmax(0,1fr) minmax(0,1.15fr);
+            gap: 40px; max-width: 1400px; width: 100%;
+            margin: 0 auto; padding: 18px 34px 40px;
+        }
+        .lp-left { min-width: 0; }
+        .lp-logo { width: 210px; max-width: 60%; display: block; margin-bottom: 16px; }
+        .lp-h1 { font-size: 33px; line-height: 1.15; font-weight: 700; color: #E5A50A; margin-bottom: 10px; }
+        .lp-h2 { font-size: 16px; line-height: 1.4; font-weight: 500; color: #c4ccdd; margin-bottom: 16px; }
+        .lp-desc { font-size: 15px; line-height: 1.6; color: #aeb7c9; margin-bottom: 18px; max-width: 640px; }
+        .lp-features { list-style: none; margin: 0 0 20px; padding: 0; }
+        .lp-features li {
+            position: relative; padding-left: 20px; margin-bottom: 9px;
+            font-size: 14px; color: #cdd4e2; line-height: 1.45;
+        }
+        .lp-features li::before {
+            content: ''; position: absolute; left: 0; top: 7px;
+            width: 7px; height: 7px; border-radius: 50%; background: #D4880F;
+        }
+        .lp-designed {
+            border: 1px solid #24304f; border-left: 3px solid #D4880F; border-radius: 8px;
+            padding: 14px 18px; margin-bottom: 22px; background: rgba(15,52,96,0.12);
+        }
+        .lp-designed-label {
+            font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+            color: #E5A50A; font-weight: 700; margin-bottom: 6px;
+        }
+        .lp-designed p { font-size: 13.5px; color: #b3bbcd; line-height: 1.55; }
+        .lp-begin { border: 1px solid #24304f; border-radius: 10px; padding: 18px; background: #131b30; max-width: 640px; }
+        .lp-begin-label {
+            font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+            color: #8a94ac; font-weight: 700; margin-bottom: 12px;
+        }
+        .lp-terms-row {
+            display: flex; align-items: center; gap: 14px; width: 100%;
+            background: #0e1526; border: 1px solid #24304f; border-radius: 8px;
+            padding: 14px 16px; cursor: pointer; text-align: left; color: inherit;
+            margin-bottom: 14px; transition: border-color 0.15s;
+        }
+        .lp-terms-row:hover { border-color: #D4880F; }
+        .lp-terms-icon {
+            flex: none; width: 26px; height: 26px; border-radius: 50%;
+            background: #D4880F; color: #16213e; font-weight: 800;
+            display: flex; align-items: center; justify-content: center; font-size: 15px;
+        }
+        .lp-terms-row.accepted { border-color: #2f5a34; }
+        .lp-terms-row.accepted .lp-terms-icon { background: #4CAF50; color: #0b1120; }
+        .lp-terms-text { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+        .lp-terms-text strong { font-size: 14px; color: #e6e9f0; }
+        .lp-terms-text span { font-size: 12px; color: #8a94ac; }
+        .lp-terms-arrow { color: #8a94ac; font-size: 20px; }
+        .lp-begin-actions { display: flex; gap: 12px; }
+        .lp-decline {
+            flex: none; padding: 12px 22px; border-radius: 8px; cursor: pointer;
+            background: #1a2338; border: 1px solid #2a3654; color: #cdd4e2; font-size: 14px;
+        }
+        .lp-decline:hover { border-color: #3a4668; }
+        .lp-launch {
+            flex: 1; padding: 12px 22px; border-radius: 8px; cursor: pointer; border: none;
+            font-size: 15px; font-weight: 600; color: #fff;
+            background: linear-gradient(135deg, #D4880F, #E5A50A);
+        }
+        .lp-launch:disabled { cursor: not-allowed; color: #8a7a5a; background: #3a2f1a; opacity: 0.75; }
+        .lp-right { min-width: 0; display: flex; flex-direction: column; }
+        .lp-preview-label { font-size: 13px; color: #8a94ac; margin-bottom: 10px; }
+        .lp-preview {
+            position: relative; flex: 1; min-height: 460px;
+            border: 1px solid #24304f; border-radius: 12px; overflow: hidden;
+            background: linear-gradient(150deg, #0e1830 0%, #070b16 70%);
+        }
+        .lp-preview-blur {
+            position: absolute; inset: 0;
+            background:
+                radial-gradient(600px 400px at 72% 55%, rgba(212,136,15,0.12), transparent 60%),
+                linear-gradient(120deg, rgba(22,33,62,0.85) 0 25%, transparent 25%);
+            filter: blur(6px);
+        }
+        .lp-preview-blur::after {
+            content: ''; position: absolute; inset: 0;
+            background: url('/sunform-logo.png') no-repeat center 42% / 220px auto;
+            opacity: 0.06; filter: blur(2px);
+        }
+        .lp-preview-cta {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+            background: #16213e; border: 1px solid #2a3654; color: #e6e9f0;
+            font-size: 15px; font-weight: 600; padding: 14px 26px; border-radius: 8px; cursor: not-allowed;
+        }
+        .lp-preview-cta.ready { cursor: pointer; border-color: #D4880F; color: #E5A50A; }
+        .lp-preview-note { font-size: 12.5px; color: #97a0b6; line-height: 1.5; margin-top: 14px; }
+        .lp-preview-note strong { color: #cdd4e2; }
+        @media (max-width: 900px) {
+            .lp-hero { grid-template-columns: 1fr; }
+            .lp-preview { min-height: 280px; }
+            .lp-h1 { font-size: 27px; }
+        }
+        /* ─── PROGRESS MODAL (analysis) ─── */
+        .progress-modal {
+            position: fixed; inset: 0; z-index: 2600;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(8,13,26,0.55);
+        }
+        .progress-modal.visible { display: flex; }
+        .progress-card {
+            background: #16213e; border: 1px solid #0f3460; border-radius: 12px;
+            padding: 22px 26px; width: 340px; max-width: 86vw;
+            box-shadow: 0 14px 44px rgba(0,0,0,0.5);
+        }
+        .progress-title { font-size: 15px; font-weight: 600; color: #E5A50A; margin-bottom: 4px; }
+        .progress-stage { font-size: 13px; color: #c4ccdd; margin-bottom: 14px; min-height: 18px; }
+        .progress-track {
+            position: relative; height: 12px; border-radius: 6px; overflow: hidden;
+            background: #0a1628; border: 1px solid #0f3460;
+        }
+        /* transform-animated (compositor thread) so it keeps sliding even while
+           the main thread is busy with a synchronous analysis burst */
+        .progress-hatch {
+            position: absolute; top: 0; left: -50%; width: 200%; height: 100%;
+            will-change: transform;
+            background-image: repeating-linear-gradient(-45deg,
+                #D4880F 0, #D4880F 10px, #7a4e08 10px, #7a4e08 20px);
+            animation: progress-slide 0.7s linear infinite;
+        }
+        @keyframes progress-slide {
+            from { transform: translateX(0); }
+            to   { transform: translateX(-28.284px); }
+        }
     </style>
 </head>
 <body>
     <!-- ─── DISCLAIMER MODAL ─── -->
-    <div class="modal-overlay" id="disclaimer-modal">
+    <div class="modal-overlay hidden" id="disclaimer-modal">
         <div class="modal-box">
+            <button class="modal-close" onclick="closeTerms()" aria-label="Close">&times;</button>
             <img src="/sunform-logo.png" alt="SunForm" class="modal-logo">
-            <h2>SunForm &mdash; Terms of Use</h2>
+            <h2>SunForm Terms of Use &amp; Disclaimer</h2>
 
             <div id="disclaimer-terms">
                 <p>SunForm is currently in active beta development. You are using unfinished software. Outputs may be incomplete, inaccurate, or incorrect &mdash; this is expected at this stage and is part of why your testing matters.</p>
@@ -968,7 +1171,67 @@
                 </label>
             </div>
 
-            <button class="btn-accept" id="disclaimer-accept-btn" disabled onclick="acceptDisclaimer()">Accept &amp; Continue</button>
+            <button class="btn-accept" id="disclaimer-accept-btn" disabled onclick="acceptTerms()">Accept &amp; continue</button>
+        </div>
+    </div>
+
+    <!-- ─── LANDING PAGE (gated launch) ─── -->
+    <div id="landing-page">
+        <nav class="lp-nav">
+            <div class="lp-chips">
+                <span class="lp-chip">Sun hours analysis</span>
+                <span class="lp-chip">Overshadowing study</span>
+                <span class="lp-chip">IFC / BIM import</span>
+                <span class="lp-chip">3D sunlight heatmap</span>
+                <span class="lp-chip">GLB &amp; PDF export</span>
+                <span class="lp-chip">Free tool</span>
+            </div>
+            <a class="lp-site" href="https://www.jakewhitearchitecture.com" target="_blank" rel="noopener">jakewhitearchitecture.com</a>
+        </nav>
+
+        <div class="lp-hero">
+            <div class="lp-left">
+                <img src="/sunform-logo.png" alt="SunForm sun hours analysis tool logo" class="lp-logo">
+                <h1 class="lp-h1">Free sun hours and overshadowing analysis for designers</h1>
+                <h2 class="lp-h2">Import an IFC or BIM model and see direct sunlight hours across roofs, ground and facades as a smooth 3D heatmap.</h2>
+                <p class="lp-desc">SunForm is a free, browser-based solar analysis tool for architects, architectural technologists and designers. Load a building model, pick a location and season, and run a sun hours study to understand daylight, solar exposure and overshadowing across a scheme. Everything runs in your browser, with no login and nothing to install.</p>
+                <ul class="lp-features">
+                    <li>Sun hours analysis on roofs, ground surfaces and vertical facades</li>
+                    <li>Overshadowing and shadow studies driven by real sun paths</li>
+                    <li>Direct IFC and BIM model import via web-ifc</li>
+                    <li>Smooth, per-pixel 3D sunlight heatmap with no visible grid</li>
+                    <li>Seasonal comparison across winter, spring, autumn and summer</li>
+                    <li>Export coloured GLB models and dimensioned PDF plans</li>
+                </ul>
+                <div class="lp-designed">
+                    <div class="lp-designed-label">Designed for</div>
+                    <p>Domestic-scale solar studies, extending to small commercial and public projects. Built for architects, architectural technologists, surveyors and designers who can critically interpret and verify the results.</p>
+                </div>
+                <div class="lp-begin">
+                    <div class="lp-begin-label">Before you begin</div>
+                    <button class="lp-terms-row" id="lp-terms-row" onclick="openTerms()">
+                        <span class="lp-terms-icon" id="lp-terms-icon">!</span>
+                        <span class="lp-terms-text">
+                            <strong id="lp-terms-title">Read and accept the Terms of Use</strong>
+                            <span id="lp-terms-sub">Open, read to the end, then tick the confirmations</span>
+                        </span>
+                        <span class="lp-terms-arrow">&rsaquo;</span>
+                    </button>
+                    <div class="lp-begin-actions">
+                        <button class="lp-decline" onclick="declineTool()">Decline</button>
+                        <button class="lp-launch" id="lp-launch-btn" disabled onclick="launchTool()">Launch tool &rarr;</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lp-right">
+                <div class="lp-preview-label">Tool preview, accept the terms to launch</div>
+                <div class="lp-preview">
+                    <div class="lp-preview-blur"></div>
+                    <button class="lp-preview-cta" id="lp-preview-cta" onclick="launchTool()">Accept terms to launch</button>
+                </div>
+                <p class="lp-preview-note"><strong>SunForm does not verify compliance.</strong> It is an indicative design aid, not a substitute for professional daylighting or right to light consultancy. Sun hours results depend on the accuracy of your model and inputs, and all outputs must be independently checked by a competent person before use.</p>
+            </div>
         </div>
     </div>
 
@@ -1154,6 +1417,7 @@
                     <button class="btn btn-secondary" id="pdf-btn" onclick="event.stopPropagation(); showDownloadConfirm('pdf');" style="flex:1;">Download PDF</button>
                 </div>
                 <button class="btn btn-secondary" onclick="event.stopPropagation(); resetWorkflow();" style="margin-top:8px;">New Analysis</button>
+                <button class="btn btn-secondary" onclick="event.stopPropagation(); openBetaFeedback();" style="margin-top:8px; width:100%; font-size:11px; padding:6px 14px;">Provide Beta Testing Feedback</button>
                 <div class="bug-report">
                     Results look wrong? <a id="bug-report-link" href="#">Report an issue</a>
                 </div>
@@ -1180,6 +1444,110 @@
                 <button class="btn-cancel" onclick="hideDownloadConfirm()">Cancel</button>
                 <button class="btn-proceed" id="download-confirm-btn" disabled onclick="proceedDownload()">Download</button>
             </div>
+        </div>
+    </div>
+
+    <!-- ─── BETA FEEDBACK WIZARD MODAL ─── -->
+    <div class="modal-overlay hidden" id="beta-feedback-modal">
+        <div class="modal-box" style="max-width:520px;">
+            <!-- Step 1: Instructions + generated challenge -->
+            <div id="bf-step-1">
+                <h2 style="margin-bottom:12px;">Beta Testing Feedback</h2>
+                <p style="margin-bottom:6px;"><a id="bf-suncalc-link" href="#" target="_blank" rel="noopener" style="color:#00CFC8; text-decoration:underline; font-weight:bold;">Check this result on SunCalc.org &rarr;</a></p>
+                <p style="margin-bottom:14px; color:#aaa; font-size:12px;">Open the link, then compare the Azimuth and Altitude values shown on SunCalc with SunForm's values below.</p>
+
+                <div style="background:#0a1628; border:1px solid #0f3460; border-radius:6px; padding:12px 16px; margin-bottom:14px; font-size:13px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                        <span style="color:#888;">Latitude:</span>
+                        <span id="bf-lat" style="color:#00CFC8; font-family:monospace;"></span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                        <span style="color:#888;">Longitude:</span>
+                        <span id="bf-lng" style="color:#00CFC8; font-family:monospace;"></span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                        <span style="color:#888;">Date:</span>
+                        <span id="bf-date" style="color:#00CFC8; font-family:monospace;"></span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between;">
+                        <span style="color:#888;">Time (local clock):</span>
+                        <span id="bf-time" style="color:#00CFC8; font-family:monospace;"></span>
+                    </div>
+                </div>
+
+                <p style="margin-bottom:10px; font-size:12px;">Enter the values from your chosen calculator:</p>
+                <div style="display:flex; gap:12px; margin-bottom:14px;">
+                    <div style="flex:1;">
+                        <label style="font-size:11px; color:#888; display:block; margin-bottom:3px;">Azimuth (deg)</label>
+                        <input type="number" id="bf-user-azimuth" step="0.01" placeholder="e.g. 165.3" style="width:100%; padding:6px 8px; background:#0a1628; border:1px solid #0f3460; color:#e0e0e0; border-radius:4px; font-size:13px;">
+                    </div>
+                    <div style="flex:1;">
+                        <label style="font-size:11px; color:#888; display:block; margin-bottom:3px;">Altitude (deg)</label>
+                        <input type="number" id="bf-user-altitude" step="0.01" placeholder="e.g. 42.7" style="width:100%; padding:6px 8px; background:#0a1628; border:1px solid #0f3460; color:#e0e0e0; border-radius:4px; font-size:13px;">
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:10px;">
+                    <button class="btn btn-secondary" onclick="closeBetaFeedback()" style="flex:1;">Cancel</button>
+                    <button class="btn btn-primary" onclick="checkBetaFeedback()" style="flex:1;">Check</button>
+                </div>
+            </div>
+
+            <!-- Step 2: Results comparison -->
+            <div id="bf-step-2" style="display:none;">
+                <h2 style="margin-bottom:12px;">Results Comparison</h2>
+
+                <div style="background:#0a1628; border:1px solid #0f3460; border-radius:6px; padding:12px 16px; margin-bottom:6px; font-size:13px;">
+                    <div style="font-size:11px; color:#888; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">Your Input (external calculator)</div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                        <span style="color:#888;">Azimuth:</span>
+                        <span id="bf-user-az-result" style="color:#e0e0e0; font-family:monospace;"></span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between;">
+                        <span style="color:#888;">Altitude:</span>
+                        <span id="bf-user-alt-result" style="color:#e0e0e0; font-family:monospace;"></span>
+                    </div>
+                </div>
+
+                <div style="background:#0a1628; border:1px solid #0f3460; border-radius:6px; padding:12px 16px; margin-bottom:6px; font-size:13px;">
+                    <div style="font-size:11px; color:#888; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">SunForm Calculated</div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                        <span style="color:#888;">Azimuth:</span>
+                        <span id="bf-calc-az-result" style="color:#00CFC8; font-family:monospace;"></span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between;">
+                        <span style="color:#888;">Altitude:</span>
+                        <span id="bf-calc-alt-result" style="color:#00CFC8; font-family:monospace;"></span>
+                    </div>
+                </div>
+
+                <div style="background:#0a1628; border:1px solid #0f3460; border-radius:6px; padding:12px 16px; margin-bottom:14px; font-size:13px;">
+                    <div style="font-size:11px; color:#888; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">Difference</div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                        <span style="color:#888;">Azimuth:</span>
+                        <span id="bf-diff-az" style="font-family:monospace;"></span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                        <span style="color:#888;">Altitude:</span>
+                        <span id="bf-diff-alt" style="font-family:monospace;"></span>
+                    </div>
+                    <div id="bf-verdict" style="text-align:center; font-size:13px; font-weight:bold; padding:6px; border-radius:4px;"></div>
+                </div>
+
+                <div style="display:flex; gap:10px;">
+                    <button class="btn btn-secondary" onclick="closeBetaFeedback()" style="flex:1;">Close</button>
+                    <button class="btn btn-primary" onclick="sendBetaFeedback()" style="flex:1;">Send Feedback</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── PROGRESS MODAL (analysis) ─── -->
+    <div class="progress-modal" id="progress-modal">
+        <div class="progress-card">
+            <div class="progress-title" id="progress-title">Running analysis</div>
+            <div class="progress-stage" id="progress-stage">Preparing...</div>
+            <div class="progress-track"><div class="progress-hatch"></div></div>
         </div>
     </div>
 
@@ -2638,7 +3006,7 @@
         // edge exceeds maxEdgeLength. Replaces the old grid clipping: no
         // polygon slicing, no degenerate slivers, and adjacent triangles share
         // edge midpoints exactly so vertices dedupe for smooth interpolation.
-        function subdivideToMaxEdge(triangles, maxEdgeLength) {
+        async function subdivideToMaxEdge(triangles, maxEdgeLength) {
             const maxE2 = maxEdgeLength * maxEdgeLength;
             const out = [];
             const stack = triangles.slice();
@@ -2650,7 +3018,12 @@
                 return t;
             }
 
+            let subYield = 0;
             while (stack.length) {
+                if ((subYield++ & 32767) === 0) {
+                    setProgressStage('Subdividing geometry (' + out.length.toLocaleString() + ' cells)');
+                    await new Promise(r => setTimeout(r, 0));
+                }
                 const tri = stack.pop();
                 const a = tri[0], b = tri[1], c = tri[2];
                 const ab = (b[0]-a[0])*(b[0]-a[0]) + (b[1]-a[1])*(b[1]-a[1]) + (b[2]-a[2])*(b[2]-a[2]);
@@ -2683,7 +3056,7 @@
         //   positions Float32Array, index Uint32Array,
         //   normals   Float32Array (area-weighted; faceNormal/groupNormal preferred),
         //   areas     Float32Array (vertex Voronoi area: 1/3 of each adjacent triangle)
-        function buildVertexData(triangles) {
+        async function buildVertexData(triangles) {
             const QUANT = 10000; // 0.1mm quantisation so shared edge midpoints merge
             const indexOf = new Map();
             const positions = [];
@@ -2692,6 +3065,10 @@
             const areaAcc = [];
 
             for (let t = 0; t < triangles.length; t++) {
+                if (t > 0 && (t & 32767) === 0) {
+                    setProgressStage('Building analysis points (' + Math.round(t / triangles.length * 100) + '%)');
+                    await new Promise(r => setTimeout(r, 0));
+                }
                 const tri = triangles[t];
                 const a = tri[0], b = tri[1], c = tri[2];
 
@@ -2986,18 +3363,70 @@
             // 5. Subdivide so no edge exceeds maxEdge
             showStatus('Subdividing ' + filteredTris.length + ' triangles to ' + maxEdge + 'm edges...');
             await new Promise(r => setTimeout(r, 0));
-            const subTris = subdivideToMaxEdge(filteredTris, maxEdge);
+            const subTris = await subdivideToMaxEdge(filteredTris, maxEdge);
 
             // 6. Deduplicate shared vertices and build per-vertex data
             showStatus('Building vertex data from ' + subTris.length + ' triangles...');
             await new Promise(r => setTimeout(r, 0));
-            const geom = buildVertexData(subTris);
+            const geom = await buildVertexData(subTris);
 
             console.log('[prepareAnalysisGeometry] ' + geom.vertexCount + ' unique vertices, ' + geom.triCount + ' triangles');
             cachedGeom = geom;
             cachedMaxEdge = maxEdge;
             showStatus('Geometry prepared: ' + geom.vertexCount + ' analysis points at ' + maxEdge + 'm resolution');
             return geom;
+        }
+
+        // ─── VERTEX FIELD SMOOTHING (shadow-edge anti-aliasing) ───
+        // Per-vertex shadow tests are binary per sun position, so a sharp
+        // shadow terminator sampled at finite vertex spacing aliases into a
+        // zigzag that follows the triangulation (and eave-edge vertices
+        // flicker on grazing hits). Two neighbour-averaging passes filter that
+        // high-frequency zigzag, roughly a one-vertex-spacing penumbra, while
+        // leaving flat regions exactly unchanged.
+        function buildVertexAdjacency(geom) {
+            if (geom.nbrStart) return;
+            const n = geom.vertexCount;
+            const idx = geom.index;
+            const sets = new Array(n);
+            for (let i = 0; i < n; i++) sets[i] = new Set();
+            for (let t = 0; t < idx.length; t += 3) {
+                const a = idx[t], b = idx[t+1], c = idx[t+2];
+                sets[a].add(b); sets[a].add(c);
+                sets[b].add(a); sets[b].add(c);
+                sets[c].add(a); sets[c].add(b);
+            }
+            let total = 0;
+            for (let i = 0; i < n; i++) total += sets[i].size;
+            const start = new Uint32Array(n + 1);
+            const list = new Uint32Array(total);
+            let p = 0;
+            for (let i = 0; i < n; i++) {
+                start[i] = p;
+                for (const j of sets[i]) list[p++] = j;
+            }
+            start[n] = p;
+            geom.nbrStart = start;
+            geom.nbrList = list;
+        }
+
+        function smoothVertexField(values, geom, iterations, lam) {
+            buildVertexAdjacency(geom);
+            const n = geom.vertexCount;
+            const start = geom.nbrStart, list = geom.nbrList;
+            let v = values;
+            let buf = new Float32Array(n);
+            for (let it = 0; it < iterations; it++) {
+                for (let i = 0; i < n; i++) {
+                    const s = start[i], e = start[i+1];
+                    if (e === s) { buf[i] = v[i]; continue; }
+                    let sum = 0;
+                    for (let k = s; k < e; k++) sum += v[list[k]];
+                    buf[i] = (1 - lam) * v[i] + lam * (sum / (e - s));
+                }
+                const tmp = v; v = buf; buf = tmp;
+            }
+            return v;
         }
 
         // ─── RAY CAST SUN HOURS (per unique vertex) ───
@@ -3053,6 +3482,11 @@
                 }
             }
 
+            // Anti-alias sharp shadow terminators (see smoothVertexField)
+            showStatus('Smoothing shadow boundaries...');
+            await new Promise(r => setTimeout(r, 0));
+            const smoothedHours = smoothVertexField(vertexSunHours, geom, 2, 0.5);
+
             // Summary statistics: vertex Voronoi-area weighting (one-third of
             // each adjacent triangle's area per vertex)
             const areas = geom.areas;
@@ -3061,7 +3495,7 @@
             let sumHoursWeighted = 0;
             for (let i = 0; i < n; i++) {
                 const a = areas[i];
-                const h = vertexSunHours[i];
+                const h = smoothedHours[i];
                 totalArea += a;
                 sumHoursWeighted += h * a;
                 if (h < minHours) minHours = h;
@@ -3071,7 +3505,7 @@
 
             return {
                 geom: geom,
-                vertexSunHours: vertexSunHours,
+                vertexSunHours: smoothedHours,
                 maxEdge: cachedMaxEdge,
                 sunPositions: sunPositions,
                 summary: {
@@ -3206,6 +3640,7 @@
 
             btn.textContent = 'Analysing...';
             btn.disabled = true;
+            showProgress('Running sun hours analysis');
 
             // Clear previous season heatmaps
             for (const [key, group] of Object.entries(seasonHeatmaps)) {
@@ -3242,6 +3677,8 @@
                     scene.add(hm);
                     hm.visible = false; // hide initially
                 }
+
+                hideProgress();
 
                 // Show first analysed season
                 visibleSeason = seasons[0];
@@ -3292,10 +3729,12 @@
                 updateBugReportLink();
 
             } catch (err) {
+                hideProgress();
                 alert('Analysis failed: ' + err.message);
                 console.error(err);
                 hideStatus();
             } finally {
+                hideProgress();
                 btn.textContent = 'Run Analysis';
                 btn.disabled = false;
             }
@@ -3684,7 +4123,25 @@
         });
 
         // ─── STATUS HELPERS ───
+        let progressActive = false;
+        function showProgress(title) {
+            progressActive = true;
+            document.getElementById('progress-title').textContent = title || 'Running analysis';
+            document.getElementById('progress-stage').textContent = 'Preparing...';
+            document.getElementById('progress-modal').classList.add('visible');
+        }
+        function setProgressStage(text) {
+            const el = document.getElementById('progress-stage');
+            if (el) el.textContent = text;
+        }
+        function hideProgress() {
+            progressActive = false;
+            document.getElementById('progress-modal').classList.remove('visible');
+        }
+
         function showStatus(msg) {
+            // During analysis, route status text into the progress popup stage line
+            if (progressActive) { setProgressStage(msg); return; }
             const el = document.getElementById('status-overlay');
             el.textContent = msg;
             el.style.display = 'block';
@@ -3954,6 +4411,181 @@
                 '&body=' + encodeURIComponent(body);
         }
 
+        // ─── BETA FEEDBACK WIZARD (sun position verification) ───
+        let bfChallenge = null;
+
+        function openBetaFeedback() {
+            const lat = parseFloat(document.getElementById('latitude').value) || 51.5074;
+            const lng = parseFloat(document.getElementById('longitude').value) || -0.1278;
+
+            // Pick a random date spread across the year
+            const month = Math.floor(Math.random() * 12);
+            const day = Math.floor(Math.random() * 28) + 1;
+            const year = new Date().getFullYear();
+            const dateStr = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+
+            // Get all sun positions for that date at 1-hour steps
+            const positions = getSunPositions(lat, lng, dateStr, 1);
+            if (positions.length === 0) {
+                alert('No visible sun positions found for this date and location. Please set your site coordinates first.');
+                return;
+            }
+
+            // Pick a random hour from those where the sun is up
+            const pick = positions[Math.floor(Math.random() * positions.length)];
+
+            bfChallenge = {
+                lat: lat,
+                lng: lng,
+                dateStr: dateStr,
+                hour: pick.hour,
+                localHour: null,  // set below after BST calc
+                calcAzimuth: pick.azimuth,
+                calcAltitude: pick.altitude
+            };
+
+            // Convert UTC hour to local clock time (UK: UTC in winter, UTC+1 in BST)
+            function isUKBST(dateStr) {
+                const y = parseInt(dateStr.split('-')[0]);
+                const m = parseInt(dateStr.split('-')[1]);
+                const d = parseInt(dateStr.split('-')[2]);
+                if (m < 3 || m > 10) return false;
+                if (m > 3 && m < 10) return true;
+                // March: BST starts last Sunday
+                if (m === 3) {
+                    const lastDay = new Date(y, 2, 31).getDay();
+                    const lastSun = 31 - lastDay;
+                    return d >= lastSun;
+                }
+                // October: BST ends last Sunday
+                const lastDay = new Date(y, 9, 31).getDay();
+                const lastSun = 31 - lastDay;
+                return d < lastSun;
+            }
+
+            const bstOffset = isUKBST(dateStr) ? 1 : 0;
+            const localHour = pick.hour + bstOffset;
+            bfChallenge.localHour = localHour;
+            bfChallenge.utcOffset = bstOffset;
+
+            // Build SunCalc URL: https://www.suncalc.org/#/{lat},{lon},{zoom}/{YYYY.MM.DD}/{HH:MM}/1/3
+            const suncalcDate = dateStr.replace(/-/g, '.');
+            const suncalcTime = String(localHour).padStart(2, '0') + ':00';
+            const suncalcUrl = 'https://www.suncalc.org/#/' + lat.toFixed(4) + ',' + lng.toFixed(4) + ',9/' + suncalcDate + '/' + suncalcTime + '/1/3';
+            document.getElementById('bf-suncalc-link').href = suncalcUrl;
+
+            // Populate the wizard
+            document.getElementById('bf-lat').textContent = lat.toFixed(4);
+            document.getElementById('bf-lng').textContent = lng.toFixed(4);
+            document.getElementById('bf-date').textContent = dateStr;
+            document.getElementById('bf-time').textContent = suncalcTime;
+            document.getElementById('bf-user-azimuth').value = '';
+            document.getElementById('bf-user-altitude').value = '';
+
+            // Show step 1, hide step 2
+            document.getElementById('bf-step-1').style.display = '';
+            document.getElementById('bf-step-2').style.display = 'none';
+            document.getElementById('beta-feedback-modal').classList.remove('hidden');
+        }
+
+        function closeBetaFeedback() {
+            document.getElementById('beta-feedback-modal').classList.add('hidden');
+        }
+
+        function checkBetaFeedback() {
+            const userAz = parseFloat(document.getElementById('bf-user-azimuth').value);
+            const userAlt = parseFloat(document.getElementById('bf-user-altitude').value);
+            if (isNaN(userAz) || isNaN(userAlt)) {
+                alert('Please enter both azimuth and altitude values.');
+                return;
+            }
+
+            const calcAz = bfChallenge.calcAzimuth;
+            const calcAlt = bfChallenge.calcAltitude;
+            const diffAz = Math.abs(userAz - calcAz);
+            const diffAlt = Math.abs(userAlt - calcAlt);
+            const pctAz = calcAz !== 0 ? (diffAz / Math.abs(calcAz)) * 100 : diffAz;
+            let pctAlt = calcAlt !== 0 ? (diffAlt / Math.abs(calcAlt)) * 100 : diffAlt;
+
+            // For near-horizon altitudes, percentage is misleading; use a degree
+            // threshold instead (<0.5 deg good, <1 deg acceptable).
+            if (Math.abs(calcAlt) < 5) {
+                pctAlt = diffAlt <= 0.5 ? 0.5 : diffAlt <= 1 ? 1.5 : 3;
+            }
+
+            // Store for email
+            bfChallenge.userAzimuth = userAz;
+            bfChallenge.userAltitude = userAlt;
+            bfChallenge.diffAz = diffAz;
+            bfChallenge.diffAlt = diffAlt;
+
+            // Populate results
+            document.getElementById('bf-user-az-result').textContent = userAz.toFixed(2) + '°';
+            document.getElementById('bf-user-alt-result').textContent = userAlt.toFixed(2) + '°';
+            document.getElementById('bf-calc-az-result').textContent = calcAz.toFixed(2) + '°';
+            document.getElementById('bf-calc-alt-result').textContent = calcAlt.toFixed(2) + '°';
+
+            const diffAzEl = document.getElementById('bf-diff-az');
+            const diffAltEl = document.getElementById('bf-diff-alt');
+            diffAzEl.textContent = diffAz.toFixed(2) + '° (' + pctAz.toFixed(1) + '%)';
+            diffAltEl.textContent = diffAlt.toFixed(2) + '° (' + pctAlt.toFixed(1) + '%)';
+            diffAzEl.style.color = pctAz <= 1 ? '#4CAF50' : pctAz <= 2 ? '#FFA726' : '#FF5252';
+            diffAltEl.style.color = pctAlt <= 1 ? '#4CAF50' : pctAlt <= 2 ? '#FFA726' : '#FF5252';
+
+            const maxPct = Math.max(pctAz, pctAlt);
+            const verdict = document.getElementById('bf-verdict');
+            if (maxPct <= 1) {
+                verdict.textContent = 'Good match, within 1%';
+                verdict.style.background = 'rgba(76,175,80,0.15)';
+                verdict.style.color = '#4CAF50';
+            } else if (maxPct <= 2) {
+                verdict.textContent = 'Acceptable match, within 2%';
+                verdict.style.background = 'rgba(255,167,38,0.15)';
+                verdict.style.color = '#FFA726';
+            } else {
+                verdict.textContent = 'Significant difference detected';
+                verdict.style.background = 'rgba(255,82,82,0.15)';
+                verdict.style.color = '#FF5252';
+            }
+
+            // Switch to step 2
+            document.getElementById('bf-step-1').style.display = 'none';
+            document.getElementById('bf-step-2').style.display = '';
+        }
+
+        function sendBetaFeedback() {
+            const c = bfChallenge;
+            const emailMaxPct = Math.max(
+                c.diffAz / Math.abs(bfChallenge.calcAzimuth) * 100,
+                c.diffAlt / Math.abs(bfChallenge.calcAltitude) * 100
+            );
+            const matchStatus = emailMaxPct <= 1 ? 'GOOD MATCH' : emailMaxPct <= 2 ? 'ACCEPTABLE MATCH' : 'DIFFERENCE DETECTED';
+
+            const subject = encodeURIComponent('SunForm Beta Feedback: ' + matchStatus);
+            const body = encodeURIComponent(
+                'SunForm Beta Testing Feedback\n' +
+                '================================\n\n' +
+                'Site Location\n' +
+                '  Latitude:   ' + c.lat.toFixed(4) + '\n' +
+                '  Longitude:  ' + c.lng.toFixed(4) + '\n\n' +
+                'Test Parameters\n' +
+                '  Date:       ' + c.dateStr + '\n' +
+                '  Time:       ' + String(c.localHour).padStart(2, '0') + ':00 (UTC+' + c.utcOffset + ') / ' + String(c.hour).padStart(2, '0') + ':00 (UTC)\n\n' +
+                'User Input (external calculator)\n' +
+                '  Azimuth:    ' + c.userAzimuth.toFixed(2) + '°\n' +
+                '  Altitude:   ' + c.userAltitude.toFixed(2) + '°\n\n' +
+                'SunForm Calculated\n' +
+                '  Azimuth:    ' + c.calcAzimuth.toFixed(2) + '°\n' +
+                '  Altitude:   ' + c.calcAltitude.toFixed(2) + '°\n\n' +
+                'Difference\n' +
+                '  Azimuth:    ' + c.diffAz.toFixed(2) + '°\n' +
+                '  Altitude:   ' + c.diffAlt.toFixed(2) + '°\n\n' +
+                'Verdict: ' + matchStatus + '\n'
+            );
+
+            window.location.href = 'mailto:sunform@jakewhitearchitecture.com?subject=' + subject + '&body=' + body;
+        }
+
         // ─── DISCLAIMER MODAL ───
         function updateDisclaimerAccept() {
             const c1 = document.getElementById('disclaimer-check1').checked;
@@ -3963,8 +4595,41 @@
             document.getElementById('disclaimer-accept-btn').disabled = !allChecked;
         }
 
-        function acceptDisclaimer() {
+        let sunformTermsAccepted = false;
+
+        function openTerms() {
+            document.getElementById('disclaimer-modal').classList.remove('hidden');
+        }
+
+        function closeTerms() {
             document.getElementById('disclaimer-modal').classList.add('hidden');
+        }
+
+        function acceptTerms() {
+            sunformTermsAccepted = true;
+            document.getElementById('disclaimer-modal').classList.add('hidden');
+
+            document.getElementById('lp-launch-btn').disabled = false;
+
+            const cta = document.getElementById('lp-preview-cta');
+            cta.classList.add('ready');
+            cta.textContent = 'Launch tool';
+
+            document.getElementById('lp-terms-row').classList.add('accepted');
+            document.getElementById('lp-terms-icon').textContent = '\u2713';
+            document.getElementById('lp-terms-title').textContent = 'Terms accepted';
+            document.getElementById('lp-terms-sub').textContent = 'You can review them again any time';
+        }
+
+        function launchTool() {
+            if (!sunformTermsAccepted) { openTerms(); return; }
+            document.getElementById('landing-page').classList.add('hidden');
+            // The 3D viewport was covered, so size it now that it is visible
+            window.dispatchEvent(new Event('resize'));
+        }
+
+        function declineTool() {
+            window.location.href = 'https://www.jakewhitearchitecture.com';
         }
 
         // ─── DOWNLOAD CONFIRMATION ───

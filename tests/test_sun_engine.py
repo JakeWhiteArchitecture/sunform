@@ -27,6 +27,7 @@ from sunform_engine import (
     compute_vertex_normals,
     compute_vertex_voronoi_areas,
     compute_sun_hours_per_vertex,
+    smooth_vertex_field,
     ray_hits_real_occluder,
     dedupe_triangles,
 )
@@ -593,6 +594,52 @@ class TestPerVertexAnalysis:
         verts, tri_idx, normals = self._flat_plane()
         for n in normals:
             assert abs(n[0]) < 1e-9 and abs(n[2]) < 1e-9 and n[1] > 0.999
+
+
+
+
+# ── Vertex-field smoothing (shadow-edge anti-aliasing) ───────────────────
+class TestSmoothing:
+    """smooth_vertex_field: filters the aliased zigzag a binary shadow test
+    produces at sharp terminators, without disturbing flat regions."""
+
+    def _plane(self):
+        tris = [((0, 0, 0), (20, 0, 0), (20, 0, 20)),
+                ((0, 0, 0), (20, 0, 20), (0, 0, 20))]
+        sub = subdivide_to_max_edge(tris, 0.5)
+        return build_unique_vertices(sub)
+
+    def test_constant_field_unchanged(self):
+        verts, tri_idx = self._plane()
+        out = smooth_vertex_field([4.0] * len(verts), tri_idx, iterations=3)
+        assert all(abs(v - 4.0) < 1e-12 for v in out)
+
+    def test_step_field_mean_preserved(self):
+        verts, tri_idx = self._plane()
+        vals = [1.0 if v[2] > v[0] * 0.36 + 5 else 0.0 for v in verts]
+        out = smooth_vertex_field(vals, tri_idx, iterations=2)
+        m0 = sum(vals) / len(vals)
+        m1 = sum(out) / len(out)
+        assert abs(m0 - m1) < 0.01, f"mean drifted {m0} -> {m1}"
+
+    def test_zigzag_variance_reduced(self):
+        verts, tri_idx = self._plane()
+        vals = [1.0 if v[2] > v[0] * 0.36 + 5 else 0.0 for v in verts]
+        out = smooth_vertex_field(vals, tri_idx, iterations=2)
+        # smoothing must strictly reduce total squared neighbour differences
+        nbrs = {}
+        for (a, b, c) in tri_idx:
+            for i, j in ((a, b), (b, c), (c, a)):
+                nbrs.setdefault(min(i, j), set()).add(max(i, j))
+        def rough(v):
+            return sum((v[i] - v[j]) ** 2 for i, js in nbrs.items() for j in js)
+        assert rough(out) < rough(vals) * 0.6
+
+    def test_values_stay_in_range(self):
+        verts, tri_idx = self._plane()
+        vals = [1.0 if v[2] > 10 else 0.0 for v in verts]
+        out = smooth_vertex_field(vals, tri_idx, iterations=3)
+        assert all(-1e-9 <= v <= 1.0 + 1e-9 for v in out)
 
 
 if __name__ == '__main__':
