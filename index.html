@@ -2766,9 +2766,13 @@
                     }
                 }
                 shadowBVH = new BVH(positions, index);
+                shadowSrcPositions = positions;
+                shadowSrcIndex = index;
                 console.log(`Shadow BVH built: ${dedup.length} triangles (de-duplicated ${before - dedup.length})`);
             } else {
                 shadowBVH = null;
+                shadowSrcPositions = null;
+                shadowSrcIndex = null;
             }
             hideStatus();
         }
@@ -3455,92 +3459,160 @@
             return v;
         }
 
+        // ─── RAY-CAST WEB WORKER (keeps the main thread free during analysis) ───
+        // The worker runs entirely in the browser (no server). It is built from
+        // an inline Blob using the SAME BVH / smoothing / cast functions via
+        // Function.prototype.toString, so there is one source of truth and the
+        // single-file build is preserved.
+        let rayWorker = null;
+        let rayWorkerJob = 0;
+        let shadowSrcPositions = null;
+        let shadowSrcIndex = null;
+
+        function castVertexSunHours(positions, normals, bvh, geom, sunDirs, timeStep, offset, selfShadow) {
+            const n = geom.vertexCount;
+            const S = sunDirs.length / 3;
+            const hours = new Float32Array(n);
+            for (let s = 0; s < S; s++) {
+                const dx = sunDirs[s*3], dy = sunDirs[s*3+1], dz = sunDirs[s*3+2];
+                for (let j = 0; j < n; j++) {
+                    const nx = normals[j*3], ny = normals[j*3+1], nz = normals[j*3+2];
+                    const ox = positions[j*3] + nx*offset;
+                    const oy = positions[j*3+1] + ny*offset;
+                    const oz = positions[j*3+2] + nz*offset;
+                    const blocked = bvh && (selfShadow
+                        ? bvh.intersectsRealShadow(ox, oy, oz, dx, dy, dz, nx, ny, nz)
+                        : bvh.intersectsAny(ox, oy, oz, dx, dy, dz));
+                    if (!blocked) hours[j] += timeStep;
+                }
+            }
+            return smoothVertexField(hours, geom, 2, 0.5);
+        }
+
+        function summarizeSunHours(geom, sunHours) {
+            const areas = geom.areas;
+            const n = geom.vertexCount;
+            let totalArea = 0, minHours = Infinity, maxHours = -Infinity, sumHoursWeighted = 0;
+            for (let i = 0; i < n; i++) {
+                const a = areas[i], h = sunHours[i];
+                totalArea += a; sumHoursWeighted += h * a;
+                if (h < minHours) minHours = h;
+                if (h > maxHours) maxHours = h;
+            }
+            const avgHours = totalArea > 0 ? sumHoursWeighted / totalArea : 0;
+            return {
+                area_total: totalArea.toFixed(1),
+                cells_total: n,
+                min_hours: Math.round(minHours * 10) / 10,
+                max_hours: Math.round(maxHours * 10) / 10,
+                avg_hours: Math.round(avgHours * 10) / 10,
+            };
+        }
+
+        function buildRayWorkerSource() {
+            return [
+                BVH.toString(),
+                buildVertexAdjacency.toString(),
+                smoothVertexField.toString(),
+                castVertexSunHours.toString(),
+                'let W = null;',
+                'self.onmessage = function (e) {',
+                '  var m = e.data;',
+                '  if (m.type === "setup") {',
+                '    W = { bvh: new BVH(m.shadowPositions, m.shadowIndex),',
+                '          positions: m.positions, normals: m.normals,',
+                '          geom: { index: m.index, vertexCount: m.vertexCount },',
+                '          offset: m.offset, selfShadow: m.selfShadow };',
+                '    self.postMessage({ type: "ready" });',
+                '  } else if (m.type === "cast") {',
+                '    var out = castVertexSunHours(W.positions, W.normals, W.bvh, W.geom, m.sunDirs, m.timeStep, W.offset, W.selfShadow);',
+                '    var arr = (out instanceof Float32Array) ? out : Float32Array.from(out);',
+                '    self.postMessage({ type: "result", jobId: m.jobId, sunHours: arr }, [arr.buffer]);',
+                '  }',
+                '};',
+            ].join('\n');
+        }
+
+        function createRayWorker() {
+            if (typeof Worker === 'undefined' || !shadowSrcPositions) return null;
+            try {
+                const blob = new Blob([buildRayWorkerSource()], { type: 'application/javascript' });
+                return new Worker(URL.createObjectURL(blob));
+            } catch (e) {
+                console.warn('Ray worker unavailable, using main thread:', e);
+                return null;
+            }
+        }
+
+        function workerSetup(worker, geom) {
+            return new Promise((resolve, reject) => {
+                function onMsg(e) {
+                    if (e.data && e.data.type === 'ready') { worker.removeEventListener('message', onMsg); resolve(); }
+                }
+                worker.addEventListener('message', onMsg);
+                worker.addEventListener('error', reject, { once: true });
+                worker.postMessage({
+                    type: 'setup',
+                    shadowPositions: shadowSrcPositions,
+                    shadowIndex: shadowSrcIndex,
+                    positions: geom.positions,
+                    normals: geom.normals,
+                    index: geom.index,
+                    vertexCount: geom.vertexCount,
+                    offset: 0.01,
+                    selfShadow: selfShadowExclusion,
+                });
+            });
+        }
+
+        function workerCast(worker, sunDirs, timeStep) {
+            return new Promise((resolve, reject) => {
+                const jobId = ++rayWorkerJob;
+                function onMsg(e) {
+                    if (e.data && e.data.type === 'result' && e.data.jobId === jobId) {
+                        worker.removeEventListener('message', onMsg);
+                        resolve(e.data.sunHours);
+                    }
+                }
+                worker.addEventListener('message', onMsg);
+                worker.addEventListener('error', reject, { once: true });
+                worker.postMessage({ type: 'cast', jobId: jobId, sunDirs: sunDirs, timeStep: timeStep }, [sunDirs.buffer]);
+            });
+        }
+
         // ─── RAY CAST SUN HOURS (per unique vertex) ───
-        async function runTerrainAnalysis(latitude, longitude, timeStep, dateStr, geom) {
+        async function runTerrainAnalysis(latitude, longitude, timeStep, dateStr, geom, worker) {
 
             const sunPositions = getSunPositions(latitude, longitude, dateStr, timeStep);
             if (sunPositions.length === 0) {
                 throw new Error('No sun positions above horizon for given date/location');
             }
 
-            const n = geom.vertexCount;
-            const totalRays = n * sunPositions.length;
-            showStatus('Casting ' + totalRays.toLocaleString() + ' rays (' + n + ' vertices x ' + sunPositions.length + ' sun positions)...');
-
-            const sunDirs = sunPositions.map(sp => {
-                const v = sunDirection(sp.azimuth, sp.altitude);
-                return [v.x, v.y, v.z];
-            });
-
-            const pos = geom.positions;
-            const nor = geom.normals;
-            const vertexSunHours = new Float32Array(n);
-            let raysProcessed = 0;
-            const BATCH_SIZE = 2000;
-            const OFF = 0.01; // 10mm along the vertex normal
-
-            for (let sunIdx = 0; sunIdx < sunDirs.length; sunIdx++) {
-                const dx = sunDirs[sunIdx][0], dy = sunDirs[sunIdx][1], dz = sunDirs[sunIdx][2];
-
-                for (let i = 0; i < n; i += BATCH_SIZE) {
-                    const end = Math.min(i + BATCH_SIZE, n);
-
-                    for (let j = i; j < end; j++) {
-                        const nx = nor[j*3], ny = nor[j*3+1], nz = nor[j*3+2];
-                        const ox = pos[j*3] + nx * OFF;
-                        const oy = pos[j*3+1] + ny * OFF;
-                        const oz = pos[j*3+2] + nz * OFF;
-
-                        const blocked = shadowBVH && (selfShadowExclusion
-                            ? shadowBVH.intersectsRealShadow(ox, oy, oz, dx, dy, dz, nx, ny, nz)
-                            : shadowBVH.intersectsAny(ox, oy, oz, dx, dy, dz));
-                        if (!blocked) {
-                            vertexSunHours[j] += timeStep;
-                        }
-                    }
-
-                    raysProcessed += (end - i);
-                    if (raysProcessed % (BATCH_SIZE * 4) === 0) {
-                        const pct = Math.round(raysProcessed / totalRays * 100);
-                        showStatus('Casting rays ' + pct + '%');
-                        await new Promise(r => setTimeout(r, 0));
-                    }
-                }
+            // Sun directions as a flat Float32Array (transferable to the worker)
+            const sunDirs = new Float32Array(sunPositions.length * 3);
+            for (let i = 0; i < sunPositions.length; i++) {
+                const v = sunDirection(sunPositions[i].azimuth, sunPositions[i].altitude);
+                sunDirs[i*3] = v.x; sunDirs[i*3+1] = v.y; sunDirs[i*3+2] = v.z;
             }
 
-            // Anti-alias sharp shadow terminators (see smoothVertexField)
-            showStatus('Smoothing shadow boundaries...');
-            await new Promise(r => setTimeout(r, 0));
-            const smoothedHours = smoothVertexField(vertexSunHours, geom, 2, 0.5);
-
-            // Summary statistics: vertex Voronoi-area weighting (one-third of
-            // each adjacent triangle's area per vertex)
-            const areas = geom.areas;
-            let totalArea = 0;
-            let minHours = Infinity, maxHours = -Infinity;
-            let sumHoursWeighted = 0;
-            for (let i = 0; i < n; i++) {
-                const a = areas[i];
-                const h = smoothedHours[i];
-                totalArea += a;
-                sumHoursWeighted += h * a;
-                if (h < minHours) minHours = h;
-                if (h > maxHours) maxHours = h;
+            let sunHours;
+            if (worker) {
+                // Ray casting + smoothing run off the main thread, so the 3D
+                // view stays interactive while later seasons compute.
+                sunHours = await workerCast(worker, sunDirs, timeStep);
+            } else {
+                // Fallback: main thread (blocks). One yield so the popup paints.
+                showStatus('Casting rays');
+                await new Promise(r => setTimeout(r, 0));
+                sunHours = castVertexSunHours(geom.positions, geom.normals, shadowBVH, geom, sunDirs, timeStep, 0.01, selfShadowExclusion);
             }
-            const avgHours = totalArea > 0 ? sumHoursWeighted / totalArea : 0;
 
             return {
                 geom: geom,
-                vertexSunHours: smoothedHours,
+                vertexSunHours: sunHours,
                 maxEdge: cachedMaxEdge,
                 sunPositions: sunPositions,
-                summary: {
-                    area_total: totalArea.toFixed(1),
-                    cells_total: n,
-                    min_hours: Math.round(minHours * 10) / 10,
-                    max_hours: Math.round(maxHours * 10) / 10,
-                    avg_hours: Math.round(avgHours * 10) / 10,
-                },
+                summary: summarizeSunHours(geom, sunHours),
             };
         }
 
@@ -3687,6 +3759,21 @@
                 // Prepare analysis geometry ONCE (collect + subdivide + dedup)
                 const geom = await prepareAnalysisGeometry();
 
+                // Ray-cast worker: keeps the main thread free so the 3D view
+                // stays interactive while remaining seasons compute in the
+                // background. Falls back to the main thread if unavailable.
+                rayWorker = createRayWorker();
+                if (rayWorker) {
+                    try {
+                        setProgressStage('Preparing shadow model');
+                        await workerSetup(rayWorker, geom);
+                    } catch (e) {
+                        console.warn('Worker setup failed, using main thread:', e);
+                        rayWorker.terminate();
+                        rayWorker = null;
+                    }
+                }
+
                 // Set up the season switcher up-front. Selected seasons show;
                 // pending ones display a loading hatch until they complete.
                 const switcher = document.getElementById('season-switcher');
@@ -3712,7 +3799,7 @@
                     const season = seasons[si];
                     const dateStr = SEASON_DATES[season];
 
-                    const results = await runTerrainAnalysis(lat, lng, timeStep, dateStr, geom);
+                    const results = await runTerrainAnalysis(lat, lng, timeStep, dateStr, geom, rayWorker);
                     results.season = season;
                     results.seasonLabel = SEASON_LABELS[season];
                     seasonResults[season] = results;
@@ -3760,6 +3847,7 @@
                 hideStatus();
             } finally {
                 hideProgress();
+                if (rayWorker) { rayWorker.terminate(); rayWorker = null; }
                 btn.textContent = 'Run Analysis';
                 btn.disabled = false;
             }
