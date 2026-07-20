@@ -317,6 +317,10 @@
             font-size: 11px;
             color: #00CFC8;
             z-index: 5;
+            max-width: 300px;
+            text-align: right;
+            line-height: 1.6;
+            white-space: normal;
         }
 
         /* ─── FLY MODE CROSSHAIR ─── */
@@ -1576,7 +1580,7 @@
 
     <div class="viewport" id="viewport">
         <div class="fly-crosshair" id="fly-crosshair">+</div>
-        <div class="viewport-info" id="viewport-info">Orbit: drag | Zoom: scroll | Pan: right-drag &nbsp;|&nbsp; F: fly mode &nbsp; O: orbit mode &nbsp;|&nbsp; Click a surface to probe sun hours</div>
+        <div class="viewport-info" id="viewport-info">Orbit: drag | Zoom: scroll | Pan: right-drag<br>F: fly | O: orbit | Click a surface to probe sun hours</div>
         <div class="coffee-wrap">
             <a class="coffee-btn" href="https://buymeacoffee.com/jakewhite" target="_blank" rel="noopener noreferrer">☕ Buy me a coffee</a>
             <a class="github-btn" href="https://github.com/JakeWhiteArchitecture/sunform" target="_blank" rel="noopener noreferrer">
@@ -3977,13 +3981,17 @@
                 const extX = (bb.max.x - bb.min.x) / 2 + 2;
                 const extZ = (bb.max.z - bb.min.z) / 2 + 2;
 
-                // Fit ortho camera to bounds
+                // Fit ortho camera to bounds. The frustum bounds are in the
+                // camera's own (view) space, centred on zero, NOT world space.
+                // The camera position handles the world offset, so adding cx/cz
+                // to the bounds pushed everything outside the frustum and left
+                // the page blank for any model not centred on the origin.
                 const planAspect = (pageW - 40) / (pageH - 60);
                 const orthoExtent = Math.max(extX, extZ / planAspect, extZ, extX / planAspect);
-                orthoCamera.left = cx - orthoExtent * planAspect;
-                orthoCamera.right = cx + orthoExtent * planAspect;
-                orthoCamera.top = cz + orthoExtent;
-                orthoCamera.bottom = cz - orthoExtent;
+                orthoCamera.left = -orthoExtent * planAspect;
+                orthoCamera.right = orthoExtent * planAspect;
+                orthoCamera.top = orthoExtent;
+                orthoCamera.bottom = -orthoExtent;
                 orthoCamera.position.set(cx, 500, cz);
                 orthoCamera.lookAt(cx, 0, cz);
                 orthoCamera.updateProjectionMatrix();
@@ -4329,9 +4337,9 @@
         function updateViewportInfo() {
             const el = document.getElementById('viewport-info');
             if (flyMode) {
-                el.textContent = 'FLY MODE — W/S: forward/back | A/D: strafe | Q/E: up/down | Mouse: look | O: orbit mode';
+                el.innerHTML = 'FLY MODE | W/S: forward/back | A/D: strafe<br>Q/E: up/down | Mouse: look | O: orbit';
             } else {
-                el.textContent = 'ORBIT MODE — Drag: orbit | Scroll: zoom | Right-drag: pan | F: fly mode';
+                el.innerHTML = 'ORBIT MODE | Drag: orbit | Scroll: zoom<br>Right-drag: pan | F: fly | Click to probe sun hours';
             }
         }
 
