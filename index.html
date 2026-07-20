@@ -4,24 +4,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>SunForm | Free Sun Hours &amp; Overshadowing Analysis Tool for Architects</title>
-    <meta name="description" content="SunForm is a free, browser-based sun hours analysis tool for architects and designers. Import an IFC or BIM model, run solar exposure and overshadowing studies on roofs, ground and facades, and see direct sunlight hours as a smooth 3D heatmap. No login, no install.">
-    <meta name="keywords" content="sun hours analysis, overshadowing analysis, solar analysis tool, daylight study, sun path, shadow study, direct sunlight hours, IFC viewer, BIM sunlight, solar exposure, architecture software, free architecture tool, right to light, facade solar analysis, roof solar analysis">
+    <title>SunForm | Free Sun Hours &amp; Solar shading Analysis Tool for Architects</title>
+    <meta name="description" content="SunForm is a free, browser-based sun hours analysis tool for architects and designers. Import an IFC or BIM model, run solar exposure and solar shading studies on roofs, ground and facades, and see direct sunlight hours as a smooth 3D heatmap. No login, no install.">
+    <meta name="keywords" content="sun hours analysis, solar shading analysis, solar analysis tool, daylight study, sun path, shadow study, direct sunlight hours, IFC viewer, BIM sunlight, solar exposure, architecture software, free architecture tool, right to light, facade solar analysis, roof solar analysis">
     <meta name="author" content="Jake White Architecture">
     <meta name="robots" content="index, follow">
     <meta name="theme-color" content="#16213e">
     <link rel="canonical" href="https://www.jakewhitearchitecture.com/sunform">
 
     <meta property="og:type" content="website">
-    <meta property="og:title" content="SunForm | Free Sun Hours &amp; Overshadowing Analysis for Architects">
+    <meta property="og:title" content="SunForm | Free Sun Hours &amp; Solar shading Analysis for Architects">
     <meta property="og:description" content="Import an IFC or BIM model and see direct sunlight hours across roofs, ground and facades as a smooth 3D heatmap. Free, browser-based, no login required.">
     <meta property="og:image" content="https://www.jakewhitearchitecture.com/sunform/sunform-logo.png">
     <meta property="og:url" content="https://www.jakewhitearchitecture.com/sunform">
     <meta property="og:site_name" content="SunForm">
 
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="SunForm | Free Sun Hours &amp; Overshadowing Analysis for Architects">
-    <meta name="twitter:description" content="Free, browser-based sun hours and overshadowing analysis for IFC and BIM models. Direct sunlight visualised as a 3D heatmap.">
+    <meta name="twitter:title" content="SunForm | Free Sun Hours &amp; Solar shading Analysis for Architects">
+    <meta name="twitter:description" content="Free, browser-based sun hours and solar shading analysis for IFC and BIM models. Direct sunlight visualised as a 3D heatmap.">
     <meta name="twitter:image" content="https://www.jakewhitearchitecture.com/sunform/sunform-logo.png">
 
     <script type="application/ld+json">
@@ -31,12 +31,12 @@
       "name": "SunForm",
       "applicationCategory": "DesignApplication",
       "operatingSystem": "Web browser",
-      "description": "Free, browser-based sun hours and overshadowing analysis tool for architects. Import IFC or BIM models and visualise direct sunlight hours across roofs, ground and facades as a 3D heatmap.",
+      "description": "Free, browser-based sun hours and solar shading analysis tool for architects. Import IFC or BIM models and visualise direct sunlight hours across roofs, ground and facades as a 3D heatmap.",
       "url": "https://www.jakewhitearchitecture.com/sunform",
       "offers": { "@type": "Offer", "price": "0", "priceCurrency": "GBP" },
       "featureList": [
         "Sun hours analysis for roofs, ground and facades",
-        "Overshadowing and shadow studies",
+        "Solar shading and shadow studies",
         "IFC and BIM model import",
         "Smooth 3D sunlight heatmap",
         "Seasonal comparison",
@@ -635,6 +635,19 @@
             background: #D4880F;
             color: #fff;
         }
+        .season-sw-btn:disabled { cursor: default; }
+        .season-sw-btn.loading {
+            position: relative; overflow: hidden; color: #9aa4bf;
+            background: rgba(212,136,15,0.10);
+        }
+        .season-sw-btn.loading::after {
+            content: ''; position: absolute; top: 0; left: -50%; width: 200%; height: 100%;
+            will-change: transform; pointer-events: none;
+            background-image: repeating-linear-gradient(-45deg,
+                rgba(212,136,15,0.55) 0, rgba(212,136,15,0.55) 10px,
+                rgba(212,136,15,0.18) 10px, rgba(212,136,15,0.18) 20px);
+            animation: progress-slide 0.7s linear infinite;
+        }
 
         /* ─── BUG REPORT ─── */
         .bug-report {
@@ -899,8 +912,8 @@
             backdrop-filter: blur(4px);
             white-space: nowrap;
         }
-        .coffee-btn { background: rgba(212,136,15,0.9); color: #fff; }
-        .coffee-btn:hover { background: #E5A50A; }
+        .coffee-btn { background: rgba(22,33,62,0.82); color: #cdd4e2; border-color: #24304f; }
+        .coffee-btn:hover { border-color: #3a4668; }
         .github-btn { background: rgba(22,33,62,0.92); color: #e6e9f0; border-color: #24304f; }
         .github-btn:hover { border-color: #3a4668; }
         .github-btn .gh-star { color: #E5A50A; }
@@ -1008,7 +1021,7 @@
             margin: 0 auto; padding: 18px 34px 40px;
         }
         .lp-left { min-width: 0; }
-        .lp-logo { width: 210px; max-width: 60%; display: block; margin-bottom: 16px; }
+        .lp-logo { width: 300px; max-width: 82%; height: 76px; object-fit: fill; display: block; margin-bottom: 16px; }
         .lp-h1 { font-size: 33px; line-height: 1.15; font-weight: 700; color: #E5A50A; margin-bottom: 10px; }
         .lp-h2 { font-size: 16px; line-height: 1.4; font-weight: 500; color: #c4ccdd; margin-bottom: 16px; }
         .lp-desc { font-size: 15px; line-height: 1.6; color: #aeb7c9; margin-bottom: 18px; max-width: 640px; }
@@ -1081,7 +1094,7 @@
         }
         .lp-preview-blur::after {
             content: ''; position: absolute; inset: 0;
-            background: url('/sunform-logo.png') no-repeat center 42% / 220px auto;
+            background: url('sunform-logo.png') no-repeat center 42% / 220px auto;
             opacity: 0.06; filter: blur(2px);
         }
         .lp-preview-cta {
@@ -1135,7 +1148,7 @@
     <div class="modal-overlay hidden" id="disclaimer-modal">
         <div class="modal-box">
             <button class="modal-close" onclick="closeTerms()" aria-label="Close">&times;</button>
-            <img src="/sunform-logo.png" alt="SunForm" class="modal-logo">
+            <img src="sunform-logo.png" alt="SunForm" class="modal-logo">
             <h2>SunForm Terms of Use &amp; Disclaimer</h2>
 
             <div id="disclaimer-terms">
@@ -1190,7 +1203,7 @@
         <nav class="lp-nav">
             <div class="lp-chips">
                 <span class="lp-chip">Sun hours analysis</span>
-                <span class="lp-chip">Overshadowing study</span>
+                <span class="lp-chip">Solar shading study</span>
                 <span class="lp-chip">IFC / BIM import</span>
                 <span class="lp-chip">3D sunlight heatmap</span>
                 <span class="lp-chip">GLB &amp; PDF export</span>
@@ -1201,13 +1214,13 @@
 
         <div class="lp-hero">
             <div class="lp-left">
-                <img src="/sunform-logo.png" alt="SunForm sun hours analysis tool logo" class="lp-logo">
-                <h1 class="lp-h1">Free sun hours and overshadowing analysis for designers</h1>
+                <img src="sunform-logo.png" alt="SunForm sun hours analysis tool logo" class="lp-logo">
+                <h1 class="lp-h1">Free sun hours and solar shading analysis for designers</h1>
                 <h2 class="lp-h2">Import an IFC or BIM model and see direct sunlight hours across roofs, ground and facades as a smooth 3D heatmap.</h2>
-                <p class="lp-desc">SunForm is a free, browser-based solar analysis tool for architects, architectural technologists and designers. Load a building model, pick a location and season, and run a sun hours study to understand daylight, solar exposure and overshadowing across a scheme. Everything runs in your browser, with no login and nothing to install.</p>
+                <p class="lp-desc">SunForm is a free, browser-based solar analysis tool for architects, architectural technologists and designers. Load a building model, pick a location and season, and run a sun hours study to understand daylight, solar exposure and solar shading across a scheme. Everything runs in your browser, with no login and nothing to install.</p>
                 <ul class="lp-features">
                     <li>Sun hours analysis on roofs, ground surfaces and vertical facades</li>
-                    <li>Overshadowing and shadow studies driven by real sun paths</li>
+                    <li>Solar shading and shadow studies driven by real sun paths</li>
                     <li>Direct IFC and BIM model import via web-ifc</li>
                     <li>Smooth, per-pixel 3D sunlight heatmap with no visible grid</li>
                     <li>Seasonal comparison across winter, spring, autumn and summer</li>
@@ -1247,7 +1260,7 @@
 
     <div class="panel">
       <div class="panel-scroll">
-        <img src="/sunform-logo.png" alt="SunForm" class="logo-img">
+        <img src="sunform-logo.png" alt="SunForm" class="logo-img">
         <p class="subtitle" style="text-align:center;">A free sun hours web tool (Beta)</p>
 
         <!-- STEP 1: IMPORT -->
@@ -1352,7 +1365,7 @@
                 <hr style="border-color:#0f3460; margin:12px 0;">
                 <div class="field-row">
                     <div class="field">
-                        <label>Grid Resolution <span class="unit">m</span></label>
+                        <label>Analysis Resolution <span class="unit">m max edge</span></label>
                         <select id="grid_resolution">
                             <option value="0.1">0.1 m</option>
                             <option value="0.2">0.2 m</option>
@@ -1563,7 +1576,7 @@
 
     <div class="viewport" id="viewport">
         <div class="fly-crosshair" id="fly-crosshair">+</div>
-        <div class="viewport-info" id="viewport-info">Orbit: drag | Zoom: scroll | Pan: right-drag &nbsp;|&nbsp; F: fly mode &nbsp; O: orbit mode</div>
+        <div class="viewport-info" id="viewport-info">Orbit: drag | Zoom: scroll | Pan: right-drag &nbsp;|&nbsp; F: fly mode &nbsp; O: orbit mode &nbsp;|&nbsp; Click a surface to probe sun hours</div>
         <div class="coffee-wrap">
             <a class="coffee-btn" href="https://buymeacoffee.com/jakewhite" target="_blank" rel="noopener noreferrer">☕ Buy me a coffee</a>
             <a class="github-btn" href="https://github.com/JakeWhiteArchitecture/sunform" target="_blank" rel="noopener noreferrer">
@@ -2753,9 +2766,13 @@
                     }
                 }
                 shadowBVH = new BVH(positions, index);
+                shadowSrcPositions = positions;
+                shadowSrcIndex = index;
                 console.log(`Shadow BVH built: ${dedup.length} triangles (de-duplicated ${before - dedup.length})`);
             } else {
                 shadowBVH = null;
+                shadowSrcPositions = null;
+                shadowSrcIndex = null;
             }
             hideStatus();
         }
@@ -3442,92 +3459,160 @@
             return v;
         }
 
+        // ─── RAY-CAST WEB WORKER (keeps the main thread free during analysis) ───
+        // The worker runs entirely in the browser (no server). It is built from
+        // an inline Blob using the SAME BVH / smoothing / cast functions via
+        // Function.prototype.toString, so there is one source of truth and the
+        // single-file build is preserved.
+        let rayWorker = null;
+        let rayWorkerJob = 0;
+        let shadowSrcPositions = null;
+        let shadowSrcIndex = null;
+
+        function castVertexSunHours(positions, normals, bvh, geom, sunDirs, timeStep, offset, selfShadow) {
+            const n = geom.vertexCount;
+            const S = sunDirs.length / 3;
+            const hours = new Float32Array(n);
+            for (let s = 0; s < S; s++) {
+                const dx = sunDirs[s*3], dy = sunDirs[s*3+1], dz = sunDirs[s*3+2];
+                for (let j = 0; j < n; j++) {
+                    const nx = normals[j*3], ny = normals[j*3+1], nz = normals[j*3+2];
+                    const ox = positions[j*3] + nx*offset;
+                    const oy = positions[j*3+1] + ny*offset;
+                    const oz = positions[j*3+2] + nz*offset;
+                    const blocked = bvh && (selfShadow
+                        ? bvh.intersectsRealShadow(ox, oy, oz, dx, dy, dz, nx, ny, nz)
+                        : bvh.intersectsAny(ox, oy, oz, dx, dy, dz));
+                    if (!blocked) hours[j] += timeStep;
+                }
+            }
+            return smoothVertexField(hours, geom, 2, 0.5);
+        }
+
+        function summarizeSunHours(geom, sunHours) {
+            const areas = geom.areas;
+            const n = geom.vertexCount;
+            let totalArea = 0, minHours = Infinity, maxHours = -Infinity, sumHoursWeighted = 0;
+            for (let i = 0; i < n; i++) {
+                const a = areas[i], h = sunHours[i];
+                totalArea += a; sumHoursWeighted += h * a;
+                if (h < minHours) minHours = h;
+                if (h > maxHours) maxHours = h;
+            }
+            const avgHours = totalArea > 0 ? sumHoursWeighted / totalArea : 0;
+            return {
+                area_total: totalArea.toFixed(1),
+                cells_total: n,
+                min_hours: Math.round(minHours * 10) / 10,
+                max_hours: Math.round(maxHours * 10) / 10,
+                avg_hours: Math.round(avgHours * 10) / 10,
+            };
+        }
+
+        function buildRayWorkerSource() {
+            return [
+                BVH.toString(),
+                buildVertexAdjacency.toString(),
+                smoothVertexField.toString(),
+                castVertexSunHours.toString(),
+                'let W = null;',
+                'self.onmessage = function (e) {',
+                '  var m = e.data;',
+                '  if (m.type === "setup") {',
+                '    W = { bvh: new BVH(m.shadowPositions, m.shadowIndex),',
+                '          positions: m.positions, normals: m.normals,',
+                '          geom: { index: m.index, vertexCount: m.vertexCount },',
+                '          offset: m.offset, selfShadow: m.selfShadow };',
+                '    self.postMessage({ type: "ready" });',
+                '  } else if (m.type === "cast") {',
+                '    var out = castVertexSunHours(W.positions, W.normals, W.bvh, W.geom, m.sunDirs, m.timeStep, W.offset, W.selfShadow);',
+                '    var arr = (out instanceof Float32Array) ? out : Float32Array.from(out);',
+                '    self.postMessage({ type: "result", jobId: m.jobId, sunHours: arr }, [arr.buffer]);',
+                '  }',
+                '};',
+            ].join('\n');
+        }
+
+        function createRayWorker() {
+            if (typeof Worker === 'undefined' || !shadowSrcPositions) return null;
+            try {
+                const blob = new Blob([buildRayWorkerSource()], { type: 'application/javascript' });
+                return new Worker(URL.createObjectURL(blob));
+            } catch (e) {
+                console.warn('Ray worker unavailable, using main thread:', e);
+                return null;
+            }
+        }
+
+        function workerSetup(worker, geom) {
+            return new Promise((resolve, reject) => {
+                function onMsg(e) {
+                    if (e.data && e.data.type === 'ready') { worker.removeEventListener('message', onMsg); resolve(); }
+                }
+                worker.addEventListener('message', onMsg);
+                worker.addEventListener('error', reject, { once: true });
+                worker.postMessage({
+                    type: 'setup',
+                    shadowPositions: shadowSrcPositions,
+                    shadowIndex: shadowSrcIndex,
+                    positions: geom.positions,
+                    normals: geom.normals,
+                    index: geom.index,
+                    vertexCount: geom.vertexCount,
+                    offset: 0.01,
+                    selfShadow: selfShadowExclusion,
+                });
+            });
+        }
+
+        function workerCast(worker, sunDirs, timeStep) {
+            return new Promise((resolve, reject) => {
+                const jobId = ++rayWorkerJob;
+                function onMsg(e) {
+                    if (e.data && e.data.type === 'result' && e.data.jobId === jobId) {
+                        worker.removeEventListener('message', onMsg);
+                        resolve(e.data.sunHours);
+                    }
+                }
+                worker.addEventListener('message', onMsg);
+                worker.addEventListener('error', reject, { once: true });
+                worker.postMessage({ type: 'cast', jobId: jobId, sunDirs: sunDirs, timeStep: timeStep }, [sunDirs.buffer]);
+            });
+        }
+
         // ─── RAY CAST SUN HOURS (per unique vertex) ───
-        async function runTerrainAnalysis(latitude, longitude, timeStep, dateStr, geom) {
+        async function runTerrainAnalysis(latitude, longitude, timeStep, dateStr, geom, worker) {
 
             const sunPositions = getSunPositions(latitude, longitude, dateStr, timeStep);
             if (sunPositions.length === 0) {
                 throw new Error('No sun positions above horizon for given date/location');
             }
 
-            const n = geom.vertexCount;
-            const totalRays = n * sunPositions.length;
-            showStatus('Casting ' + totalRays.toLocaleString() + ' rays (' + n + ' vertices x ' + sunPositions.length + ' sun positions)...');
-
-            const sunDirs = sunPositions.map(sp => {
-                const v = sunDirection(sp.azimuth, sp.altitude);
-                return [v.x, v.y, v.z];
-            });
-
-            const pos = geom.positions;
-            const nor = geom.normals;
-            const vertexSunHours = new Float32Array(n);
-            let raysProcessed = 0;
-            const BATCH_SIZE = 2000;
-            const OFF = 0.01; // 10mm along the vertex normal
-
-            for (let sunIdx = 0; sunIdx < sunDirs.length; sunIdx++) {
-                const dx = sunDirs[sunIdx][0], dy = sunDirs[sunIdx][1], dz = sunDirs[sunIdx][2];
-
-                for (let i = 0; i < n; i += BATCH_SIZE) {
-                    const end = Math.min(i + BATCH_SIZE, n);
-
-                    for (let j = i; j < end; j++) {
-                        const nx = nor[j*3], ny = nor[j*3+1], nz = nor[j*3+2];
-                        const ox = pos[j*3] + nx * OFF;
-                        const oy = pos[j*3+1] + ny * OFF;
-                        const oz = pos[j*3+2] + nz * OFF;
-
-                        const blocked = shadowBVH && (selfShadowExclusion
-                            ? shadowBVH.intersectsRealShadow(ox, oy, oz, dx, dy, dz, nx, ny, nz)
-                            : shadowBVH.intersectsAny(ox, oy, oz, dx, dy, dz));
-                        if (!blocked) {
-                            vertexSunHours[j] += timeStep;
-                        }
-                    }
-
-                    raysProcessed += (end - i);
-                    if (raysProcessed % (BATCH_SIZE * 4) === 0) {
-                        const pct = Math.round(raysProcessed / totalRays * 100);
-                        showStatus('Ray casting... ' + pct + '%');
-                        await new Promise(r => setTimeout(r, 0));
-                    }
-                }
+            // Sun directions as a flat Float32Array (transferable to the worker)
+            const sunDirs = new Float32Array(sunPositions.length * 3);
+            for (let i = 0; i < sunPositions.length; i++) {
+                const v = sunDirection(sunPositions[i].azimuth, sunPositions[i].altitude);
+                sunDirs[i*3] = v.x; sunDirs[i*3+1] = v.y; sunDirs[i*3+2] = v.z;
             }
 
-            // Anti-alias sharp shadow terminators (see smoothVertexField)
-            showStatus('Smoothing shadow boundaries...');
-            await new Promise(r => setTimeout(r, 0));
-            const smoothedHours = smoothVertexField(vertexSunHours, geom, 2, 0.5);
-
-            // Summary statistics: vertex Voronoi-area weighting (one-third of
-            // each adjacent triangle's area per vertex)
-            const areas = geom.areas;
-            let totalArea = 0;
-            let minHours = Infinity, maxHours = -Infinity;
-            let sumHoursWeighted = 0;
-            for (let i = 0; i < n; i++) {
-                const a = areas[i];
-                const h = smoothedHours[i];
-                totalArea += a;
-                sumHoursWeighted += h * a;
-                if (h < minHours) minHours = h;
-                if (h > maxHours) maxHours = h;
+            let sunHours;
+            if (worker) {
+                // Ray casting + smoothing run off the main thread, so the 3D
+                // view stays interactive while later seasons compute.
+                sunHours = await workerCast(worker, sunDirs, timeStep);
+            } else {
+                // Fallback: main thread (blocks). One yield so the popup paints.
+                showStatus('Casting rays');
+                await new Promise(r => setTimeout(r, 0));
+                sunHours = castVertexSunHours(geom.positions, geom.normals, shadowBVH, geom, sunDirs, timeStep, 0.01, selfShadowExclusion);
             }
-            const avgHours = totalArea > 0 ? sumHoursWeighted / totalArea : 0;
 
             return {
                 geom: geom,
-                vertexSunHours: smoothedHours,
+                vertexSunHours: sunHours,
                 maxEdge: cachedMaxEdge,
                 sunPositions: sunPositions,
-                summary: {
-                    area_total: totalArea.toFixed(1),
-                    cells_total: n,
-                    min_hours: Math.round(minHours * 10) / 10,
-                    max_hours: Math.round(maxHours * 10) / 10,
-                    avg_hours: Math.round(avgHours * 10) / 10,
-                },
+                summary: summarizeSunHours(geom, sunHours),
             };
         }
 
@@ -3674,72 +3759,86 @@
                 // Prepare analysis geometry ONCE (collect + subdivide + dedup)
                 const geom = await prepareAnalysisGeometry();
 
-                for (let si = 0; si < seasons.length; si++) {
-                    const season = seasons[si];
-                    const dateStr = SEASON_DATES[season];
-                    showStatus(`Ray casting ${SEASON_LABELS[season]} (${si + 1}/${seasons.length})...`);
-
-                    const results = await runTerrainAnalysis(lat, lng, timeStep, dateStr, geom);
-                    results.season = season;
-                    results.seasonLabel = SEASON_LABELS[season];
-                    seasonResults[season] = results;
-
-                    // Paint heatmap for this season
-                    const hm = createHeatmapGroup(results);
-                    seasonHeatmaps[season] = hm;
-                    scene.add(hm);
-                    hm.visible = false; // hide initially
+                // Ray-cast worker: keeps the main thread free so the 3D view
+                // stays interactive while remaining seasons compute in the
+                // background. Falls back to the main thread if unavailable.
+                rayWorker = createRayWorker();
+                if (rayWorker) {
+                    try {
+                        setProgressStage('Preparing shadow model');
+                        await workerSetup(rayWorker, geom);
+                    } catch (e) {
+                        console.warn('Worker setup failed, using main thread:', e);
+                        rayWorker.terminate();
+                        rayWorker = null;
+                    }
                 }
 
-                hideProgress();
-
-                // Show first analysed season
-                visibleSeason = seasons[0];
-                seasonHeatmaps[visibleSeason].visible = true;
-                lastAnalysisResults = seasonResults[visibleSeason];
-
-                // Show results
-                showResults(seasonResults[visibleSeason].summary, visibleSeason);
-
-                // Show season switcher if > 1 season
+                // Set up the season switcher up-front. Selected seasons show;
+                // pending ones display a loading hatch until they complete.
                 const switcher = document.getElementById('season-switcher');
                 if (seasons.length > 1) {
                     switcher.classList.add('visible');
-                    document.querySelectorAll('.season-sw-btn').forEach(btn => {
-                        const key = btn.id.replace('sw-', '');
-                        btn.style.display = seasonResults[key] ? '' : 'none';
-                        btn.classList.toggle('active', key === visibleSeason);
+                    document.querySelectorAll('.season-sw-btn').forEach(b => {
+                        const key = b.id.replace('sw-', '');
+                        const sel = seasons.indexOf(key) !== -1;
+                        b.style.display = sel ? '' : 'none';
+                        b.classList.remove('active');
+                        b.classList.toggle('loading', sel);
+                        b.disabled = sel;
                     });
                 } else {
                     switcher.classList.remove('visible');
                 }
 
-                // Show colour legend
-                document.getElementById('colour-legend').classList.add('visible');
+                // Analyse each season in turn. Reveal the FIRST as soon as it is
+                // ready; the remaining season buttons keep a loading hatch until
+                // their own analysis completes, one at a time.
+                let revealed = false;
+                for (let si = 0; si < seasons.length; si++) {
+                    const season = seasons[si];
+                    const dateStr = SEASON_DATES[season];
 
-                const totalCells = seasonResults[visibleSeason].geom.vertexCount;
-                showStatus(`Analysis complete \u2014 ${seasons.length} season(s), ${totalCells} analysis points`);
-                setTimeout(hideStatus, 5000);
+                    const results = await runTerrainAnalysis(lat, lng, timeStep, dateStr, geom, rayWorker);
+                    results.season = season;
+                    results.seasonLabel = SEASON_LABELS[season];
+                    seasonResults[season] = results;
 
-                // Build summary for step completion
+                    const hm = createHeatmapGroup(results);
+                    seasonHeatmaps[season] = hm;
+                    scene.add(hm);
+                    hm.visible = false;
+
+                    const swBtn = document.getElementById('sw-' + season);
+                    if (swBtn) { swBtn.classList.remove('loading'); swBtn.disabled = false; }
+
+                    if (!revealed) {
+                        revealed = true;
+                        hideProgress();
+                        visibleSeason = season;
+                        hm.visible = true;
+                        lastAnalysisResults = results;
+                        completeStep(4, SEASON_LABELS[season] + ' ' + results.summary.avg_hours + 'h');
+                        if (swBtn) swBtn.classList.add('active');
+                        document.getElementById('colour-legend').classList.add('visible');
+                        hideCalculationMeshes();
+                        for (const vf of selectedVerticalFaces) {
+                            if (vf.highlight) vf.highlight.visible = false;
+                        }
+                    }
+                    // Refresh the results panel so newly-ready seasons show complete
+                    showResults(seasonResults[visibleSeason].summary, visibleSeason);
+                }
+
+                // All seasons finished
                 const avgList = seasons.map(s => {
                     const label = s === 'spring' ? 'Spr' : s === 'winter' ? 'Win' : 'Sum';
                     return label + ' ' + seasonResults[s].summary.avg_hours + 'h';
                 });
                 completeStep(4, avgList.join(' | '));
-
-                // Hide the IFC meshes so only heatmap is visible
-                hideCalculationMeshes();
-
-                // Hide vertical face highlight meshes
-                for (const vf of selectedVerticalFaces) {
-                    if (vf.highlight) {
-                        vf.highlight.visible = false;
-                    }
-                }
-
-
                 updateBugReportLink();
+                showStatus('Analysis complete, ' + seasons.length + ' season(s), ' + geom.vertexCount + ' analysis points');
+                setTimeout(hideStatus, 5000);
 
             } catch (err) {
                 hideProgress();
@@ -3748,6 +3847,7 @@
                 hideStatus();
             } finally {
                 hideProgress();
+                if (rayWorker) { rayWorker.terminate(); rayWorker = null; }
                 btn.textContent = 'Run Analysis';
                 btn.disabled = false;
             }
@@ -4137,18 +4237,39 @@
 
         // ─── STATUS HELPERS ───
         let progressActive = false;
+        let progressPhase = '';
+        let progressTimer = null;
+        let progressTick = 0;
+        const PROGRESS_QUIPS = [
+            'working...', 'still working...', 'getting there...',
+            'chasing shadows...', 'counting photons...', 'herding sunbeams...',
+            'asking the sun nicely...', 'nearly there...', 'any moment now...'
+        ];
+        function renderProgressStage() {
+            const el = document.getElementById('progress-stage');
+            if (!el) return;
+            const quip = PROGRESS_QUIPS[progressTick % PROGRESS_QUIPS.length];
+            el.textContent = progressPhase ? (progressPhase + ' ' + quip) : quip;
+        }
         function showProgress(title) {
             progressActive = true;
+            progressPhase = 'Warming up';
+            progressTick = 0;
             document.getElementById('progress-title').textContent = title || 'Running analysis';
-            document.getElementById('progress-stage').textContent = 'Preparing...';
+            renderProgressStage();
             document.getElementById('progress-modal').classList.add('visible');
+            clearInterval(progressTimer);
+            progressTimer = setInterval(function () { progressTick++; renderProgressStage(); }, 1500);
         }
         function setProgressStage(text) {
-            const el = document.getElementById('progress-stage');
-            if (el) el.textContent = text;
+            // Drop any trailing "... N%" so the playful quip cycle replaces it
+            progressPhase = String(text).replace(/\.*\s*\d+%\s*$/, '').replace(/\.\.\.$/, '').trim();
+            renderProgressStage();
         }
         function hideProgress() {
             progressActive = false;
+            clearInterval(progressTimer);
+            progressTimer = null;
             document.getElementById('progress-modal').classList.remove('visible');
         }
 
@@ -4800,8 +4921,8 @@
         }
 
         function handleRayProbeClick(event) {
-            // Only works when results are showing
-            if (currentStep !== 6) return;
+            // Only works when results are showing (Results is step 5)
+            if (currentStep !== 5) return;
             if (!seasonResults[visibleSeason]) return;
 
             const container = document.getElementById('viewport');
