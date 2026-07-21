@@ -1020,9 +1020,9 @@
         .lp-site:hover { color: #00CFC8; }
         .lp-hero {
             flex: 1; display: grid;
-            grid-template-columns: minmax(0,1.08fr) minmax(0,1fr);
-            gap: 36px; max-width: 1480px; width: 100%;
-            margin: 0 auto; padding: 10px 34px 22px; align-items: start;
+            grid-template-columns: minmax(0,0.86fr) minmax(0,1.14fr);
+            gap: 40px; max-width: 1680px; width: 100%;
+            margin: 0 auto; padding: 10px 26px 22px; align-items: start;
         }
         .lp-left { min-width: 0; }
         .lp-logo { width: 240px; max-width: 72%; height: auto; display: block; margin: -14px 0 -16px -6px; }
@@ -1083,9 +1083,9 @@
         }
         .lp-launch:disabled { cursor: not-allowed; color: #8a7a5a; background: #3a2f1a; opacity: 0.75; }
         .lp-right { min-width: 0; display: flex; flex-direction: column; }
-        .lp-preview-label { font-size: 13px; color: #8a94ac; margin-bottom: 10px; }
+        .lp-preview-label { font-size: 13px; color: #8a94ac; margin-top: 12px; }
         .lp-preview {
-            position: relative; flex: 1; min-height: 460px;
+            position: relative; flex: 1; min-height: 520px;
             border: 1px solid #24304f; border-radius: 12px; overflow: hidden;
             background: linear-gradient(150deg, #0e1830 0%, #070b16 70%);
         }
@@ -1252,11 +1252,11 @@
             </div>
 
             <div class="lp-right">
-                <div class="lp-preview-label">Tool preview, accept the terms to launch</div>
                 <div class="lp-preview">
                     <div class="lp-preview-blur"></div>
                     <button class="lp-preview-cta" id="lp-preview-cta" onclick="launchTool()">Accept terms to launch</button>
                 </div>
+                <div class="lp-preview-label">Tool preview, accept the terms to launch</div>
                 <p class="lp-preview-note"><strong>SunForm does not verify compliance.</strong> It is an indicative design aid, not a substitute for professional daylighting or right to light consultancy. Sun hours results depend on the accuracy of your model and inputs, and all outputs must be independently checked by a competent person before use.</p>
             </div>
         </div>
