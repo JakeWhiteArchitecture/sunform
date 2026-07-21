@@ -1022,7 +1022,8 @@
             flex: 1; display: grid;
             grid-template-columns: minmax(0,0.86fr) minmax(0,1.14fr);
             gap: 40px; max-width: 1680px; width: 100%;
-            margin: 0 auto; padding: 10px 26px 22px; align-items: start;
+            margin: 0 auto; padding: 6px 26px 18px;
+            align-items: start; align-content: start;
         }
         .lp-left { min-width: 0; }
         .lp-logo { width: 240px; max-width: 72%; height: auto; display: block; margin: -14px 0 -16px -6px; }
@@ -1047,7 +1048,7 @@
             color: #E5A50A; font-weight: 700; margin-bottom: 4px;
         }
         .lp-designed p { font-size: 13px; color: #b3bbcd; line-height: 1.5; }
-        .lp-begin { border: 1px solid #24304f; border-radius: 10px; padding: 14px; background: #131b30; max-width: 720px; }
+        .lp-begin { border: 1px solid #24304f; border-radius: 10px; padding: 12px; background: #131b30; max-width: 720px; }
         .lp-begin-label {
             font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
             color: #8a94ac; font-weight: 700; margin-bottom: 10px;
@@ -1055,8 +1056,8 @@
         .lp-terms-row {
             display: flex; align-items: center; gap: 14px; width: 100%;
             background: #0e1526; border: 1px solid #24304f; border-radius: 8px;
-            padding: 14px 16px; cursor: pointer; text-align: left; color: inherit;
-            margin-bottom: 14px; transition: border-color 0.15s;
+            padding: 11px 16px; cursor: pointer; text-align: left; color: inherit;
+            margin-bottom: 11px; transition: border-color 0.15s;
         }
         .lp-terms-row:hover { border-color: #D4880F; }
         .lp-terms-icon {
@@ -1082,7 +1083,10 @@
             background: linear-gradient(135deg, #D4880F, #E5A50A);
         }
         .lp-launch:disabled { cursor: not-allowed; color: #8a7a5a; background: #3a2f1a; opacity: 0.75; }
-        .lp-right { min-width: 0; display: flex; flex-direction: column; }
+        /* Drop the preview down so its top aligns with the heading, since the
+           logo above pushes the left-hand copy down. Reset on the stacked
+           single-column layout below. */
+        .lp-right { min-width: 0; display: flex; flex-direction: column; margin-top: 128px; }
         .lp-preview-label { font-size: 13px; color: #8a94ac; margin-top: 12px; }
         .lp-preview {
             position: relative; flex: 1; min-height: 520px;
@@ -1111,6 +1115,7 @@
         .lp-preview-note strong { color: #cdd4e2; }
         @media (max-width: 900px) {
             .lp-hero { grid-template-columns: 1fr; }
+            .lp-right { margin-top: 0; }
             .lp-preview { min-height: 280px; }
             .lp-h1 { font-size: 27px; }
         }
