@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>SunForm | Free Sun Hours &amp; Solar shading Analysis Tool for Architects</title>
+    <title>SunForm | Free Sun Hours &amp; Solar shading Analysis Tool for Designers</title>
     <meta name="description" content="SunForm is a free, browser-based sun hours analysis tool for architects and designers. Import an IFC or BIM model, run solar exposure and solar shading studies on roofs, ground and facades, and see direct sunlight hours as a smooth 3D heatmap. No login, no install.">
     <meta name="keywords" content="sun hours analysis, solar shading analysis, solar analysis tool, daylight study, sun path, shadow study, direct sunlight hours, IFC viewer, BIM sunlight, solar exposure, architecture software, free architecture tool, right to light, facade solar analysis, roof solar analysis">
     <meta name="author" content="Jake White Architecture">
@@ -13,14 +13,14 @@
     <link rel="canonical" href="https://www.jakewhitearchitecture.com/sunform">
 
     <meta property="og:type" content="website">
-    <meta property="og:title" content="SunForm | Free Sun Hours &amp; Solar shading Analysis for Architects">
+    <meta property="og:title" content="SunForm | Free Sun Hours &amp; Solar shading Analysis for Designers">
     <meta property="og:description" content="Import an IFC or BIM model and see direct sunlight hours across roofs, ground and facades as a smooth 3D heatmap. Free, browser-based, no login required.">
     <meta property="og:image" content="https://www.jakewhitearchitecture.com/sunform/sunform-logo.png">
     <meta property="og:url" content="https://www.jakewhitearchitecture.com/sunform">
     <meta property="og:site_name" content="SunForm">
 
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="SunForm | Free Sun Hours &amp; Solar shading Analysis for Architects">
+    <meta name="twitter:title" content="SunForm | Free Sun Hours &amp; Solar shading Analysis for Designers">
     <meta name="twitter:description" content="Free, browser-based sun hours and solar shading analysis for IFC and BIM models. Direct sunlight visualised as a 3D heatmap.">
     <meta name="twitter:image" content="https://www.jakewhitearchitecture.com/sunform/sunform-logo.png">
 
@@ -31,7 +31,7 @@
       "name": "SunForm",
       "applicationCategory": "DesignApplication",
       "operatingSystem": "Web browser",
-      "description": "Free, browser-based sun hours and solar shading analysis tool for architects. Import IFC or BIM models and visualise direct sunlight hours across roofs, ground and facades as a 3D heatmap.",
+      "description": "Free, browser-based sun hours and solar shading analysis tool for architects and designers. Import IFC or BIM models and visualise direct sunlight hours across roofs, ground and facades as a 3D heatmap.",
       "url": "https://www.jakewhitearchitecture.com/sunform",
       "offers": { "@type": "Offer", "price": "0", "priceCurrency": "GBP" },
       "featureList": [
@@ -1020,9 +1020,10 @@
         .lp-site:hover { color: #00CFC8; }
         .lp-hero {
             flex: 1; display: grid;
-            grid-template-columns: minmax(0,1.08fr) minmax(0,1fr);
-            gap: 36px; max-width: 1480px; width: 100%;
-            margin: 0 auto; padding: 10px 34px 22px; align-items: start;
+            grid-template-columns: minmax(0,0.86fr) minmax(0,1.14fr);
+            gap: 40px; max-width: 1680px; width: 100%;
+            margin: 0 auto; padding: 6px 26px 18px;
+            align-items: start; align-content: start;
         }
         .lp-left { min-width: 0; }
         .lp-logo { width: 240px; max-width: 72%; height: auto; display: block; margin: -14px 0 -16px -6px; }
@@ -1047,7 +1048,7 @@
             color: #E5A50A; font-weight: 700; margin-bottom: 4px;
         }
         .lp-designed p { font-size: 13px; color: #b3bbcd; line-height: 1.5; }
-        .lp-begin { border: 1px solid #24304f; border-radius: 10px; padding: 14px; background: #131b30; max-width: 720px; }
+        .lp-begin { border: 1px solid #24304f; border-radius: 10px; padding: 12px; background: #131b30; max-width: 720px; }
         .lp-begin-label {
             font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
             color: #8a94ac; font-weight: 700; margin-bottom: 10px;
@@ -1055,8 +1056,8 @@
         .lp-terms-row {
             display: flex; align-items: center; gap: 14px; width: 100%;
             background: #0e1526; border: 1px solid #24304f; border-radius: 8px;
-            padding: 14px 16px; cursor: pointer; text-align: left; color: inherit;
-            margin-bottom: 14px; transition: border-color 0.15s;
+            padding: 11px 16px; cursor: pointer; text-align: left; color: inherit;
+            margin-bottom: 11px; transition: border-color 0.15s;
         }
         .lp-terms-row:hover { border-color: #D4880F; }
         .lp-terms-icon {
@@ -1082,10 +1083,13 @@
             background: linear-gradient(135deg, #D4880F, #E5A50A);
         }
         .lp-launch:disabled { cursor: not-allowed; color: #8a7a5a; background: #3a2f1a; opacity: 0.75; }
-        .lp-right { min-width: 0; display: flex; flex-direction: column; }
-        .lp-preview-label { font-size: 13px; color: #8a94ac; margin-bottom: 10px; }
+        /* Drop the preview down so its top aligns with the heading, since the
+           logo above pushes the left-hand copy down. Reset on the stacked
+           single-column layout below. */
+        .lp-right { min-width: 0; display: flex; flex-direction: column; margin-top: 128px; }
+        .lp-preview-label { font-size: 13px; color: #8a94ac; margin-top: 12px; }
         .lp-preview {
-            position: relative; flex: 1; min-height: 460px;
+            position: relative; flex: 1; min-height: 520px;
             border: 1px solid #24304f; border-radius: 12px; overflow: hidden;
             background: linear-gradient(150deg, #0e1830 0%, #070b16 70%);
         }
@@ -1111,6 +1115,7 @@
         .lp-preview-note strong { color: #cdd4e2; }
         @media (max-width: 900px) {
             .lp-hero { grid-template-columns: 1fr; }
+            .lp-right { margin-top: 0; }
             .lp-preview { min-height: 280px; }
             .lp-h1 { font-size: 27px; }
         }
@@ -1252,11 +1257,11 @@
             </div>
 
             <div class="lp-right">
-                <div class="lp-preview-label">Tool preview, accept the terms to launch</div>
                 <div class="lp-preview">
                     <div class="lp-preview-blur"></div>
                     <button class="lp-preview-cta" id="lp-preview-cta" onclick="launchTool()">Accept terms to launch</button>
                 </div>
+                <div class="lp-preview-label">Tool preview, accept the terms to launch</div>
                 <p class="lp-preview-note"><strong>SunForm does not verify compliance.</strong> It is an indicative design aid, not a substitute for professional daylighting or right to light consultancy. Sun hours results depend on the accuracy of your model and inputs, and all outputs must be independently checked by a competent person before use.</p>
             </div>
         </div>
